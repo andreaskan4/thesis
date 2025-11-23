@@ -1,0 +1,877 @@
+﻿@page "/profgrades"
+@inject AuthStateService AuthStateService
+@inject GradesService GradesService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Thesis - Professor Grades</PageTitle>
+
+@if (!isAuthChecked)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading Grades Management...</p>
+    </div>
+}
+else if (!isAuthorized)
+{
+    <div class="unauthorized-container">
+        <div class="unauthorized-card">
+            <div class="unauthorized-icon">🚫</div>
+            <h3>Access Denied</h3>
+            <p>You don't have permission to manage grades.</p>
+            <button class="btn btn-primary" @onclick="RedirectToHome">Return to Home</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="professor-grades">
+        <div class="header-bar">
+            <button class="back-btn" @onclick="GoBack">← Back to Dashboard</button>
+            <h2>Manage Student Grades</h2>
+            <div class="info-badge">Professor View</div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading">Loading courses and students...</div>
+        }
+        else if (!courses.Any())
+        {
+            <div class="no-data-message">
+                <h3>No Courses Assigned</h3>
+                <p>You are not currently teaching any courses.</p>
+            </div>
+        }
+        else
+        {
+            <div class="grades-container">
+                <div class="grades-table-container">
+                    <div class="course-selection">
+                        <label>Select Course:</label>
+                        <select @onchange="OnCourseSelected" value="@selectedCourseId">
+                            <option value="0">-- Choose a course --</option>
+                            @foreach (var course in courses)
+                            {
+                                <option value="@course.Id">@course.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    @if (selectedCourse != null)
+                    {
+                        <div class="course-info">
+                            <h4>@selectedCourse.Name</h4>
+                            <p>@selectedCourse.Description</p>
+                            <div class="course-stats">
+                                <span>Students: @enrolledStudents.Count</span>
+                                <span>Grading Method: @(selectedCourse.GradingMethod?.ToString() ?? "Standard")</span>
+                            </div>
+                        </div>
+
+                        @if (enrolledStudents.Any())
+                        {
+                            <table class="grades-table">
+                                <thead>
+                                    <tr>
+                                        <th>Student</th>
+                                        <th>Academic ID</th>
+                                        <th>Email</th>
+                                        <th>Current Grade</th>
+                                        <th>New Grade</th>
+                                        <th>Last Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var student in enrolledStudents)
+                                    {
+                                        <tr>
+                                            <td>@student.StudentName</td>
+                                            <td>@student.AcademicId</td>
+                                            <td>@student.StudentEmail</td>
+                                            <td>
+                                                @if (student.CurrentGrade.HasValue)
+                                                {
+                                                    <strong class="grade-value @GetGradeColorClass(student.CurrentGrade.Value)">
+                                                        @student.CurrentGrade.Value.ToString("F1")
+                                                    </strong>
+                                                }
+                                                else
+                                                {
+                                                    <span class="no-grade">-</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <input type="number"
+                                                       step="0.1"
+                                                       min="0"
+                                                       max="10"
+                                                       class="grade-input"
+                                                       @bind="student.NewGrade"
+                                                       @onkeypress="@(e => { if (e.Key == "Enter") SaveStudentGrade(student); })" />
+                                            </td>
+                                            <td>
+                                                @if (student.UpdatedAt.HasValue)
+                                                {
+                                                    <small>@student.UpdatedAt.Value.ToString("MMM dd, yyyy HH:mm")</small>
+                                                }
+                                                else
+                                                {
+                                                    <small>Never</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                <button class="save-btn"
+                                                        @onclick="() => SaveStudentGrade(student)"
+                                                        disabled="@(student.NewGrade == student.CurrentGrade || !IsValidGrade(student.NewGrade))">
+                                                    Save
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+
+                            <div class="bulk-actions">
+                                <h4>Bulk Actions</h4>
+                                <div class="bulk-form">
+                                    <input type="number"
+                                           step="0.1"
+                                           min="0"
+                                           max="10"
+                                           @bind="bulkGradeValue"
+                                           class="bulk-grade-input"
+                                           placeholder="Set all grades to..." />
+                                    <button class="bulk-apply-btn"
+                                            @onclick="ApplyBulkGrades"
+                                            disabled="@(!IsValidGrade(bulkGradeValue))">
+                                        Apply to All
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="no-students-message">
+                                <h4>No Students Enrolled</h4>
+                                <p>There are no students currently enrolled in this course.</p>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="form-section">
+                    <h4>Quick Grade Entry</h4>
+
+                    <div class="form-field">
+                        <label>Student:</label>
+                        <select @bind="quickGradeStudentId">
+                            <option value="0">-- Select Student --</option>
+                            @foreach (var student in enrolledStudents)
+                            {
+                                <option value="@student.StudentId">@student.StudentName</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Grade (0-10):</label>
+                        <input type="number"
+                               step="0.1"
+                               min="0"
+                               max="10"
+                               @bind="quickGradeValue"
+                               class="grade-input" />
+                        <small style="color: #666; font-size: 0.8rem;">Scale: 0-10 (e.g., 8.5 = 85%)</small>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="save-btn"
+                                @onclick="SaveQuickGrade"
+                                disabled="@(!IsQuickGradeValid())">
+                            Save Grade
+                        </button>
+                        <button class="clear-btn" @onclick="ClearQuickGrade">Clear</button>
+                    </div>
+
+                    <div class="stats-section">
+                        <h5>Course Statistics</h5>
+                        @if (selectedCourse != null)
+                        {
+                            <div class="stat-item">
+                                <span>Students Enrolled:</span>
+                                <strong>@enrolledStudents.Count</strong>
+                            </div>
+                            <div class="stat-item">
+                                <span>Graded Students:</span>
+                                <strong>@enrolledStudents.Count(s => s.CurrentGrade.HasValue)</strong>
+                            </div>
+                            <div class="stat-item">
+                                <span>Average Grade:</span>
+                                <strong>@GetAverageGrade()</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool isAuthorized = false;
+    private bool isAuthChecked = false;
+    private bool isLoading = false;
+
+    private List<Course> courses = new();
+    private List<StudentGradeViewModel> enrolledStudents = new();
+    private int selectedCourseId = 0;
+    private Course? selectedCourse;
+    private int quickGradeStudentId = 0;
+    private double quickGradeValue = 0;
+    private double bulkGradeValue = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await AuthStateService.InitializeAsync();
+            var user = AuthStateService.CurrentUser;
+
+            isAuthorized = user != null && (user.Role == "Teacher" || user.Role == "Admin");
+            isAuthChecked = true;
+
+            if (isAuthorized)
+            {
+                await LoadProfessorCourses();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing: {ex.Message}");
+            isAuthChecked = true;
+        }
+    }
+
+    private async Task LoadProfessorCourses()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var professorId = await GetCurrentProfessorId();
+            // Get all courses and filter by professor ID
+            var allCourses = await GradesService.GetCoursesAsync();
+            courses = allCourses.Where(c => c.ProfessorId == professorId).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading courses: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnCourseSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int courseId))
+        {
+            selectedCourseId = courseId;
+            if (courseId > 0)
+            {
+                await LoadEnrolledStudents(courseId);
+            }
+            else
+            {
+                selectedCourse = null;
+                enrolledStudents.Clear();
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task LoadEnrolledStudents(int courseId)
+    {
+        try
+        {
+            selectedCourse = courses.FirstOrDefault(c => c.Id == courseId);
+            if (selectedCourse == null) return;
+
+            // Get enrollments for this course
+            var enrollments = await GradesService.GetEnrollmentsForCourseAsync(courseId);
+
+            if (enrollments == null || !enrollments.Any())
+            {
+                enrolledStudents.Clear();
+                StateHasChanged();
+                return;
+            }
+
+            // Get grades for this course
+            var allGrades = await GradesService.GetAllGradesAsync();
+            var courseGrades = allGrades.Where(g => g.CourseId == courseId).ToList();
+
+            enrolledStudents = enrollments.Select(e => new StudentGradeViewModel
+            {
+                StudentId = e.StudentId,
+                StudentName = $"{e.Student?.Name} {e.Student?.LastName}".Trim(),
+                StudentEmail = e.Student?.Email ?? "",
+                AcademicId = e.Student?.AcademicId ?? "",
+                CourseId = courseId,
+                CurrentGrade = courseGrades.FirstOrDefault(g => g.StudentId == e.StudentId)?.GradeValue,
+                NewGrade = courseGrades.FirstOrDefault(g => g.StudentId == e.StudentId)?.GradeValue,
+                UpdatedAt = courseGrades.FirstOrDefault(g => g.StudentId == e.StudentId)?.UpdatedAt
+            }).ToList();
+
+            // Reset quick grade form
+            quickGradeStudentId = 0;
+            quickGradeValue = 0;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading students: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading students: {ex.Message}");
+        }
+    }
+
+    private async Task SaveStudentGrade(StudentGradeViewModel student)
+    {
+        if (!IsValidGrade(student.NewGrade))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please enter a valid grade between 0 and 10.");
+            return;
+        }
+
+        try
+        {
+            var now = DateTime.Now;
+            var existingGrade = await GetGradeAsync(student.StudentId, student.CourseId);
+
+            if (existingGrade != null)
+            {
+                // Update existing grade
+                existingGrade.GradeValue = student.NewGrade.Value;
+                existingGrade.UpdatedAt = now;
+                await GradesService.UpdateGradeAsync(existingGrade);
+            }
+            else
+            {
+                // Create new grade
+                var newGrade = new Grade
+                {
+                    StudentId = student.StudentId,
+                    CourseId = student.CourseId,
+                    GradeValue = student.NewGrade.Value,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                await GradesService.AddGradeAsync(newGrade);
+            }
+
+            // Update local state
+            student.CurrentGrade = student.NewGrade;
+            student.UpdatedAt = now;
+            StateHasChanged();
+
+            await JSRuntime.InvokeVoidAsync("alert", $"Grade updated successfully for {student.StudentName}");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error saving grade: {ex.Message}");
+        }
+    }
+
+    private async Task<Grade?> GetGradeAsync(int studentId, int courseId)
+    {
+        var allGrades = await GradesService.GetAllGradesAsync();
+        return allGrades.FirstOrDefault(g => g.StudentId == studentId && g.CourseId == courseId);
+    }
+
+    private async Task SaveQuickGrade()
+    {
+        if (!IsQuickGradeValid()) return;
+
+        var student = enrolledStudents.FirstOrDefault(s => s.StudentId == quickGradeStudentId);
+        if (student != null)
+        {
+            student.NewGrade = quickGradeValue;
+            await SaveStudentGrade(student);
+            ClearQuickGrade();
+        }
+    }
+
+    private async Task ApplyBulkGrades()
+    {
+        if (!IsValidGrade(bulkGradeValue))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please enter a valid grade between 0 and 10.");
+            return;
+        }
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            $"Are you sure you want to set all grades to {bulkGradeValue}?");
+
+        if (!confirmed) return;
+
+        try
+        {
+            foreach (var student in enrolledStudents)
+            {
+                student.NewGrade = bulkGradeValue;
+                await SaveStudentGrade(student);
+            }
+
+            await JSRuntime.InvokeVoidAsync("alert", $"All grades updated to {bulkGradeValue} successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error applying bulk grades: {ex.Message}");
+        }
+    }
+
+    private void ClearQuickGrade()
+    {
+        quickGradeStudentId = 0;
+        quickGradeValue = 0;
+    }
+
+    private bool IsValidGrade(double? grade)
+    {
+        return grade.HasValue && grade >= 0 && grade <= 10;
+    }
+
+    private bool IsQuickGradeValid()
+    {
+        return quickGradeStudentId > 0 && IsValidGrade(quickGradeValue);
+    }
+
+    private string GetGradeColorClass(double grade)
+    {
+        return grade switch
+        {
+            >= 8.5 => "grade-excellent",
+            >= 7 => "grade-good",
+            >= 5.5 => "grade-average",
+            _ => "grade-poor"
+        };
+    }
+
+    private string GetAverageGrade()
+    {
+        var gradedStudents = enrolledStudents.Where(s => s.CurrentGrade.HasValue).ToList();
+        if (!gradedStudents.Any()) return "-";
+
+        var average = gradedStudents.Average(s => s.CurrentGrade.Value);
+        return average.ToString("F1");
+    }
+
+    private async Task<int> GetCurrentProfessorId()
+    {
+        var user = AuthStateService.CurrentUser;
+        return user?.Id ?? 0;
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/profhome");
+    private void RedirectToHome() => Navigation.NavigateTo("/");
+
+    public class StudentGradeViewModel
+    {
+        public int StudentId { get; set; }
+        public string StudentName { get; set; } = "";
+        public string StudentEmail { get; set; } = "";
+        public string AcademicId { get; set; } = "";
+        public int CourseId { get; set; }
+        public double? CurrentGrade { get; set; }
+        public double? NewGrade { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+}
+
+<style>
+    .professor-grades {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 30px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    .header-bar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 30px;
+        background: white;
+        padding: 20px 30px;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+    }
+
+        .header-bar h2 {
+            color: #2d3748;
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+    .info-badge {
+        margin-left: auto;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .back-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+    .grades-container {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 30px;
+    }
+
+    .grades-table-container {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+        overflow-x: auto;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+
+    .course-selection {
+        margin-bottom: 20px;
+    }
+
+        .course-selection label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .course-selection select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+
+    .course-info {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        border-left: 4px solid #667eea;
+    }
+
+        .course-info h4 {
+            margin: 0 0 10px 0;
+            color: #2d3748;
+        }
+
+        .course-info p {
+            margin: 0 0 15px 0;
+            color: #4a5568;
+        }
+
+    .course-stats {
+        display: flex;
+        gap: 20px;
+        font-size: 0.9rem;
+        color: #718096;
+    }
+
+    .grades-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+    }
+
+        .grades-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            position: sticky;
+            top: 0;
+        }
+
+        .grades-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+            font-size: 0.9rem;
+        }
+
+        .grades-table tr:hover {
+            background: #f7fafc;
+        }
+
+    .grade-input {
+        width: 80px;
+        padding: 6px 8px;
+        border: 2px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 0.9rem;
+    }
+
+        .grade-input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+
+    .grade-value {
+        font-weight: 600;
+    }
+
+    .grade-excellent {
+        color: #38a169;
+    }
+
+    .grade-good {
+        color: #3182ce;
+    }
+
+    .grade-average {
+        color: #d69e2e;
+    }
+
+    .grade-poor {
+        color: #e53e3e;
+    }
+
+    .no-grade {
+        color: #a0aec0;
+        font-style: italic;
+    }
+
+    .save-btn {
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+        .save-btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+
+    .bulk-actions {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+    }
+
+        .bulk-actions h4 {
+            margin: 0 0 15px 0;
+            color: #2d3748;
+        }
+
+    .bulk-form {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .bulk-grade-input {
+        padding: 8px 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 6px;
+        width: 150px;
+    }
+
+    .bulk-apply-btn {
+        background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+
+        .bulk-apply-btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+
+    .form-section {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+        height: fit-content;
+        position: sticky;
+        top: 30px;
+    }
+
+    .form-field {
+        margin-bottom: 20px;
+    }
+
+        .form-field label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .form-field select,
+        .form-field input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+
+    .form-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 25px;
+    }
+
+    .clear-btn {
+        background: #e2e8f0;
+        color: #4a5568;
+        border: none;
+        padding: 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        flex: 1;
+    }
+
+    .stats-section {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+        .stats-section h5 {
+            margin: 0 0 15px 0;
+            color: #2d3748;
+        }
+
+    .stat-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid #f7fafc;
+    }
+
+    .loading, .no-data-message, .no-students-message {
+        text-align: center;
+        padding: 40px;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+    }
+
+    .loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 50vh;
+        gap: 20px;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 2s linear infinite;
+    }
+
+    .unauthorized-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 70vh;
+        padding: 20px;
+    }
+
+    .unauthorized-card {
+        background: white;
+        padding: 40px;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+        max-width: 400px;
+        width: 100%;
+    }
+
+    .unauthorized-icon {
+        font-size: 3rem;
+        margin-bottom: 20px;
+    }
+
+    .unauthorized-card h3 {
+        color: #2d3748;
+        margin-bottom: 10px;
+    }
+
+    .unauthorized-card p {
+        color: #718096;
+        margin-bottom: 20px;
+    }
+
+    @@keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    @@media (max-width: 1024px) {
+        .grades-container {
+            grid-template-columns: 1fr;
+        }
+
+        .form-section {
+            position: static;
+        }
+    }
+</style>

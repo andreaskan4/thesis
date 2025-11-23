@@ -1,0 +1,1592 @@
+﻿@page "/studentcourses"
+@inject AuthStateService AuthStateService
+@inject IJSRuntime JSRuntime
+@inject Data.AppDbContext Context
+@using Thesis.Models
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Thesis - Courses</PageTitle>
+
+@if (!isAuthChecked)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading Courses...</p>
+    </div>
+}
+else if (!isAuthorized)
+{
+    <div class="unauthorized-container">
+        <div class="unauthorized-card">
+            <div class="unauthorized-icon">🚫</div>
+            <h3>Access Denied</h3>
+            <p>You don't have permission to access this page.</p>
+            <button class="btn btn-primary" @onclick="RedirectToHome">Return to Home</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="student-courses">
+        <div class="header-bar">
+            <button class="back-btn" @onclick="GoBack">← Back to Dashboard</button>
+            <h2>📚 Available Courses</h2>
+        </div>
+
+        <div class="courses-container">
+            <!-- Available Courses -->
+            <div class="courses-section">
+                <div class="section-header">
+                    <h3>🎯 Available Courses</h3>
+                    <div class="search-controls">
+                        <input type="text" @bind="searchTerm" @oninput="OnSearch"
+                               class="search-input" placeholder="Search courses..." />
+                    </div>
+                </div>
+
+                <div class="courses-grid">
+                    @foreach (var course in filteredCourses)
+                    {
+                        <div class="course-card">
+                            <div class="course-header">
+                                <h4 class="course-title">@course.Name</h4>
+                                <div class="course-meta">
+                                    <span class="course-professor">👨‍🏫 @course.Professor?.Name @course.Professor?.LastName</span>
+                                    @if (course.Professor != null)
+                                    {
+                                        <div class="professor-rating">
+                                            <span class="rating-label">Professor Rating:</span>
+                                            <div class="rating-stars">
+                                                @for (int i = 1; i <= 5; i++)
+                                                {
+                                                    int starValue = i;
+                                                    <span class="star @(i <= GetProfessorAverageRating(course.Professor.Id) ? "filled" : "")"
+                                                          @onclick="() => RateProfessor(course.Professor.Id, starValue)"
+                                                          title="Rate @course.Professor.Name @course.Professor.LastName: @starValue stars">
+                                                        ★
+                                                    </span>
+                                                }
+                                            </div>
+                                            <span class="rating-text">
+                                                @GetProfessorAverageRating(course.Professor.Id).ToString("F1")/5.0
+                                                (@GetProfessorRatingCount(course.Professor.Id) ratings)
+                                            </span>
+                                            @if (HasRatedProfessor(course.Professor.Id))
+                                            {
+                                                <span class="user-rating">
+                                                    (Your rating: @GetUserRatingForProfessor(course.Professor.Id))
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="course-content">
+                                <p class="course-description">@course.Description</p>
+
+                                <div class="course-stats">
+                                    <div class="stat">
+                                        <span class="stat-label">Difficulty:</span>
+                                        <div class="difficulty-stars">
+                                            @for (int i = 1; i <= 5; i++)
+                                            {
+                                                <span class="star @(i <= Math.Floor(course.DifficultyRating) ? "filled" : i <= course.DifficultyRating ? "half-filled" : "")">
+                                                    @if (i <= Math.Floor(course.DifficultyRating))
+                                                    {
+                                                        <text>★</text>
+                                                    }
+                                                    else if (i <= course.DifficultyRating)
+                                                    {
+                                                        <span class="half-star">★</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <text>☆</text>
+                                                    }
+                                                </span>
+                                            }
+                                            <span class="rating-text">@course.DifficultyRating.ToString("F1")</span>
+                                        </div>
+                                    </div>
+                                    <div class="stat">
+                                        <span class="stat-label">Grading:</span>
+                                        <span class="grading-method">@course.Method</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="course-actions">
+                                @if (IsEnrolled(course.Id))
+                                {
+                                    <button class="btn btn-success btn-sm" disabled>
+                                        ✅ Enrolled
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" @onclick="() => ViewCourseDetails(course.Id)">
+                                        📖 View Details
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-primary btn-sm" @onclick="() => EnrollInCourse(course.Id)">
+                                        📝 Enroll
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" @onclick="() => ViewCourseDetails(course.Id)">
+                                        👀 Preview
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (!filteredCourses.Any())
+                    {
+                        <div class="no-courses">
+                            <p>No courses found matching your criteria.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- My Enrolled Courses -->
+            <div class="enrolled-section">
+                <div class="section-header">
+                    <h3>🎓 My Enrolled Courses</h3>
+                </div>
+
+                @if (enrolledCourses.Any())
+                {
+                    <div class="enrolled-courses-list">
+                        @foreach (var enrollment in enrolledCourses)
+                        {
+                            <div class="enrolled-course-item">
+                                <div class="enrolled-course-info">
+                                    <h5>@enrollment.Course.Name</h5>
+                                    <p class="course-instructor">Professor: @enrollment.Course.Professor?.Name @enrollment.Course.Professor?.LastName</p>
+                                    <p class="enrollment-date">Enrolled: @enrollment.EnrollmentDate.ToString("MMM dd, yyyy")</p>
+                                    @if (enrollment.Course.Professor != null)
+                                    {
+                                        <div class="professor-rating-small">
+                                            <span>Professor Rating: </span>
+                                            <div class="rating-stars-small">
+                                                @for (int i = 1; i <= 5; i++)
+                                                {
+                                                    <span class="star @(i <= GetProfessorAverageRating(enrollment.Course.Professor.Id) ? "filled" : "")">
+                                                        ★
+                                                    </span>
+                                                }
+                                            </div>
+                                            <span class="rating-text">
+                                                @GetProfessorAverageRating(enrollment.Course.Professor.Id).ToString("F1")/5.0
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="enrolled-course-actions">
+                                    <button class="btn btn-primary btn-sm" @onclick="() => ViewCourseDetails(enrollment.CourseId)">
+                                        📖 Open Course
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" @onclick="() => UnenrollFromCourse(enrollment.Id)">
+                                        🗑️ Unenroll
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="no-enrollments">
+                        <p>You haven't enrolled in any courses yet. Browse available courses above to get started!</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Course Details Modal -->
+    @if (showCourseModal && selectedCourse != null)
+    {
+        <div class="modal-overlay" @onclick="CloseCourseModal">
+            <div class="modal-container course-modal" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h3 class="modal-title">@selectedCourse.Name</h3>
+                    <button class="modal-close" @onclick="CloseCourseModal">×</button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Course Information -->
+                    <div class="course-info-section">
+                        <h4>📋 Course Information</h4>
+                        <div class="course-details-grid">
+                            <div class="detail-item">
+                                <span class="detail-label">Professor:</span>
+                                <span class="detail-value">@selectedCourse.Professor?.Name @selectedCourse.Professor?.LastName</span>
+                            </div>
+                            @if (selectedCourse.Professor != null)
+                            {
+                                <div class="detail-item">
+                                    <span class="detail-label">Professor Rating:</span>
+                                    <span class="detail-value">
+                                        <div class="rating-section">
+                                            <div class="rating-stars">
+                                                @for (int i = 1; i <= 5; i++)
+                                                {
+                                                    int starValue = i;
+                                                    <span class="star @(i <= GetProfessorAverageRating(selectedCourse.Professor.Id) ? "filled" : "")"
+                                                          @onclick="() => RateProfessorFromModal(selectedCourse.Professor.Id, starValue)"
+                                                          title="Rate @selectedCourse.Professor.Name @selectedCourse.Professor.LastName: @starValue stars">
+                                                        ★
+                                                    </span>
+                                                }
+                                            </div>
+                                            <span class="rating-text">
+                                                @GetProfessorAverageRating(selectedCourse.Professor.Id).ToString("F1")/5.0
+                                                (@GetProfessorRatingCount(selectedCourse.Professor.Id) ratings)
+                                            </span>
+                                            @if (HasRatedProfessor(selectedCourse.Professor.Id))
+                                            {
+                                                <span class="user-rating">
+                                                    Your rating: @GetUserRatingForProfessor(selectedCourse.Professor.Id)
+                                                </span>
+                                            }
+                                        </div>
+                                    </span>
+                                </div>
+                            }
+                            <div class="detail-item">
+                                <span class="detail-label">Difficulty:</span>
+                                <span class="detail-value">
+                                    @selectedCourse.DifficultyRating.ToString("F1")/5.0
+                                    <span class="difficulty-stars">
+                                        @for (int i = 1; i <= 5; i++)
+                                        {
+                                            <span class="star @(i <= Math.Floor(selectedCourse.DifficultyRating) ? "filled" : "")">★</span>
+                                        }
+                                    </span>
+                                </span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Grading Method:</span>
+                                <span class="detail-value">@selectedCourse.Method</span>
+                            </div>
+                        </div>
+
+                        <div class="course-description-full">
+                            <h5>Description</h5>
+                            <p>@selectedCourse.Description</p>
+                        </div>
+                    </div>
+
+                    <!-- Announcements Section -->
+                    <div class="announcements-section">
+                        <h4>📢 Course Announcements</h4>
+                        @if (courseAnnouncements.Any())
+                        {
+                            <div class="announcements-list">
+                                @foreach (var announcement in courseAnnouncements)
+                                {
+                                    <div class="announcement-item @announcement.Priority.ToLower()">
+                                        <div class="announcement-header">
+                                            <h5 class="announcement-title">@announcement.Title</h5>
+                                            <span class="announcement-priority @announcement.Priority.ToLower()">
+                                                @GetPriorityIcon(announcement.Priority) @announcement.Priority
+                                            </span>
+                                        </div>
+                                        <div class="announcement-meta">
+                                            <span class="announcement-date">@announcement.CreatedAt.ToString("MMM dd, yyyy 'at' h:mm tt")</span>
+                                        </div>
+                                        <div class="announcement-content">
+                                            @announcement.Content
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="no-announcements">
+                                <p>No announcements for this course yet.</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    @if (IsEnrolled(selectedCourse.Id))
+                    {
+                        <button class="btn btn-outline" @onclick="CloseCourseModal">
+                            Close
+                        </button>
+                        <button class="btn btn-danger" @onclick="() => UnenrollFromCourseModal(selectedCourse.Id)">
+                            🗑️ Unenroll
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-outline" @onclick="CloseCourseModal">
+                            Cancel
+                        </button>
+                        <button class="btn btn-primary" @onclick="() => EnrollFromModal(selectedCourse.Id)">
+                            📝 Enroll Now
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    private bool isAuthChecked = false;
+    private bool isAuthorized = false;
+    private bool isLoading = true;
+    private bool showCourseModal = false;
+
+    // Data
+    private List<Course> allCourses = new();
+    private List<Enrollment> enrolledCourses = new();
+    private List<Announcement> courseAnnouncements = new();
+    private List<ProfessorRating> professorRatings = new();
+    private Dictionary<int, double> professorAverageRatings = new();
+    private Dictionary<int, int> professorRatingCounts = new();
+    private Dictionary<int, int> userRatings = new();
+
+    // UI State
+    private string searchTerm = "";
+    private Course? selectedCourse = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthorization();
+        if (isAuthorized)
+        {
+            await LoadData();
+        }
+    }
+
+    private async Task CheckAuthorization()
+    {
+        for (int i = 0; i < 20; i++)
+        {
+            if (AuthStateService.CurrentUser != null)
+                break;
+            await Task.Delay(100);
+        }
+
+        var user = AuthStateService.CurrentUser;
+        isAuthorized = user != null && user.Role == "Student";
+        isAuthChecked = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var currentUser = AuthStateService.CurrentUser;
+            if (currentUser == null) return;
+
+            // Load all courses with professor information
+            allCourses = await Context.Courses
+                .Include(c => c.Professor)
+                .Where(c => c.ProfessorId != 0)
+                .OrderBy(c => c.Name)
+                .ToListAsync();
+
+            // Load student's enrollments
+            enrolledCourses = await Context.Enrollments
+                .Where(e => e.StudentId == currentUser.Id)
+                .Include(e => e.Course)
+                .ThenInclude(c => c.Professor)
+                .OrderByDescending(e => e.EnrollmentDate)
+                .ToListAsync();
+
+            // Load professor ratings
+            await LoadProfessorRatings(currentUser.Id);
+
+            isLoading = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading data: {ex.Message}");
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadProfessorRatings(int studentId)
+    {
+        try
+        {
+            // Load all professor ratings for calculation
+            professorRatings = await Context.ProfessorRatings.ToListAsync();
+
+            // Calculate average ratings and counts for each professor
+            var professorIds = allCourses
+                .Where(c => c.ProfessorId != 0)
+                .Select(c => c.ProfessorId)
+                .Distinct();
+
+            foreach (var professorId in professorIds)
+            {
+                var ratings = professorRatings.Where(r => r.ProfessorId == professorId).ToList();
+                professorRatingCounts[professorId] = ratings.Count;
+
+                if (ratings.Any())
+                {
+                    professorAverageRatings[professorId] = ratings.Average(r => r.Rating);
+                }
+                else
+                {
+                    professorAverageRatings[professorId] = 0;
+                }
+            }
+
+            // Load user's ratings
+            var userRatingList = await Context.ProfessorRatings
+                .Where(r => r.StudentId == studentId)
+                .ToListAsync();
+
+            userRatings = userRatingList.ToDictionary(r => r.ProfessorId, r => r.Rating);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading professor ratings: {ex.Message}");
+        }
+    }
+
+    private async Task RateProfessor(int professorId, int rating)
+    {
+        Console.WriteLine($"RateProfessor called - ProfessorId: {professorId}, Rating: {rating}");
+        await SubmitProfessorRating(professorId, rating);
+    }
+
+    private async Task RateProfessorFromModal(int professorId, int rating)
+    {
+        Console.WriteLine($"RateProfessorFromModal called - ProfessorId: {professorId}, Rating: {rating}");
+        await SubmitProfessorRating(professorId, rating);
+        StateHasChanged();
+    }
+
+    private async Task SubmitProfessorRating(int professorId, int rating)
+    {
+        try
+        {
+            var currentUser = AuthStateService.CurrentUser;
+            if (currentUser == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "You must be logged in to rate professors.");
+                return;
+            }
+
+            // Validate rating range
+            if (rating < 1 || rating > 5)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Rating must be between 1 and 5.");
+                return;
+            }
+
+            // Check if user has already rated this professor
+            var existingRating = await Context.ProfessorRatings
+                .FirstOrDefaultAsync(r => r.ProfessorId == professorId && r.StudentId == currentUser.Id);
+
+            if (existingRating != null)
+            {
+                // Update existing rating
+                existingRating.Rating = rating;
+                existingRating.CreatedAt = DateTime.Now;
+                Context.ProfessorRatings.Update(existingRating);
+            }
+            else
+            {
+                // Create new rating
+                var newRating = new ProfessorRating
+                {
+                    ProfessorId = professorId,
+                    StudentId = currentUser.Id,
+                    Rating = rating,
+                    CreatedAt = DateTime.Now
+                };
+                Context.ProfessorRatings.Add(newRating);
+            }
+
+            // Save changes
+            await Context.SaveChangesAsync();
+
+            // Reload ratings data
+            await LoadProfessorRatings(currentUser.Id);
+
+            await JSRuntime.InvokeVoidAsync("alert", $"Rating submitted successfully!");
+        }
+        catch (DbUpdateException dbEx)
+        {
+            Console.WriteLine($"Database update error: {dbEx.Message}");
+            if (dbEx.InnerException != null)
+            {
+                Console.WriteLine($"Inner DB exception: {dbEx.InnerException.Message}");
+            }
+            await JSRuntime.InvokeVoidAsync("alert", $"Database error submitting rating. Please try again.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"General rating error: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error submitting rating. Please try again.");
+        }
+    }
+
+    private double GetProfessorAverageRating(int professorId)
+    {
+        return professorAverageRatings.ContainsKey(professorId) ? professorAverageRatings[professorId] : 0;
+    }
+
+    private int GetProfessorRatingCount(int professorId)
+    {
+        return professorRatingCounts.ContainsKey(professorId) ? professorRatingCounts[professorId] : 0;
+    }
+
+    private bool HasRatedProfessor(int professorId)
+    {
+        var currentUser = AuthStateService.CurrentUser;
+        return currentUser != null && userRatings.ContainsKey(professorId);
+    }
+
+    private int GetUserRatingForProfessor(int professorId)
+    {
+        return userRatings.ContainsKey(professorId) ? userRatings[professorId] : 0;
+    }
+
+    private async Task EnrollInCourse(int courseId)
+    {
+        try
+        {
+            var currentUser = AuthStateService.CurrentUser;
+            if (currentUser == null) return;
+
+            // Check if already enrolled
+            if (IsEnrolled(courseId))
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "You are already enrolled in this course.");
+                return;
+            }
+
+            var enrollment = new Enrollment
+            {
+                StudentId = currentUser.Id,
+                CourseId = courseId,
+                EnrollmentDate = DateTime.Now
+            };
+
+            Context.Enrollments.Add(enrollment);
+            await Context.SaveChangesAsync();
+
+            // Reload enrollments
+            await LoadData();
+            await JSRuntime.InvokeVoidAsync("alert", "Successfully enrolled in the course!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Enrollment error: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+            }
+            await JSRuntime.InvokeVoidAsync("alert", $"Error enrolling in course. Please try again.");
+        }
+    }
+
+    private async Task UnenrollFromCourse(int enrollmentId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to unenroll from this course? This action cannot be undone.");
+
+        if (confirmed)
+        {
+            try
+            {
+                var enrollment = await Context.Enrollments.FindAsync(enrollmentId);
+                if (enrollment != null)
+                {
+                    Context.Enrollments.Remove(enrollment);
+                    await Context.SaveChangesAsync();
+
+                    // Reload enrollments
+                    await LoadData();
+                    await JSRuntime.InvokeVoidAsync("alert", "Successfully unenrolled from the course.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unenrollment error: {ex.Message}");
+                await JSRuntime.InvokeVoidAsync("alert", $"Error unenrolling from course. Please try again.");
+            }
+        }
+    }
+
+    private async Task UnenrollFromCourseModal(int courseId)
+    {
+        var enrollment = enrolledCourses.FirstOrDefault(e => e.CourseId == courseId);
+        if (enrollment != null)
+        {
+            await UnenrollFromCourse(enrollment.Id);
+            CloseCourseModal();
+        }
+    }
+
+    private async Task EnrollFromModal(int courseId)
+    {
+        await EnrollInCourse(courseId);
+        CloseCourseModal();
+    }
+
+    private async Task ViewCourseDetails(int courseId)
+    {
+        selectedCourse = allCourses.FirstOrDefault(c => c.Id == courseId);
+        if (selectedCourse != null)
+        {
+            // Load announcements for this course
+            courseAnnouncements = await Context.Announcements
+                .Where(a => a.CourseId == courseId)
+                .Include(a => a.Professor)
+                .OrderByDescending(a => a.CreatedAt)
+                .ToListAsync();
+
+            showCourseModal = true;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseCourseModal()
+    {
+        showCourseModal = false;
+        selectedCourse = null;
+        courseAnnouncements.Clear();
+        StateHasChanged();
+    }
+
+    private bool IsEnrolled(int courseId)
+    {
+        return enrolledCourses.Any(e => e.CourseId == courseId);
+    }
+
+    private string GetPriorityIcon(string priority)
+    {
+        return priority switch
+        {
+            "Urgent" => "🚨",
+            "Important" => "⚠️",
+            _ => "📋"
+        };
+    }
+
+    private void OnSearch(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        StateHasChanged();
+    }
+
+    // Filtered data
+    private List<Course> filteredCourses => allCourses
+        .Where(c =>
+            string.IsNullOrEmpty(searchTerm) ||
+            c.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+            c.Professor?.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true ||
+            c.Professor?.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true
+        )
+        .ToList();
+
+    private void GoBack() => Navigation.NavigateTo("/studenthome");
+    private void RedirectToHome() => Navigation.NavigateTo("/");
+}
+
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    /* Loading and Auth States */
+    .loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .spinner {
+        width: 60px;
+        height: 60px;
+        border: 5px solid rgba(255, 255, 255, 0.2);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s ease-in-out infinite;
+    }
+
+    @@keyframes spin {
+        to
+
+    {
+        transform: rotate(360deg);
+    }
+
+    }
+
+    .loading-container p {
+        margin-top: 25px;
+        color: white;
+        font-size: 1.2rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    .unauthorized-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+    }
+
+    .unauthorized-card {
+        background: white;
+        padding: 60px 50px;
+        border-radius: 24px;
+        text-align: center;
+        box-shadow: 0 25px 80px rgba(0, 0, 0, 0.25);
+        max-width: 450px;
+        animation: slideUp 0.4s ease-out;
+    }
+
+    @@keyframes slideUp {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    }
+
+    .unauthorized-icon {
+        font-size: 5rem;
+        margin-bottom: 25px;
+        animation: bounce 2s ease-in-out infinite;
+    }
+
+    @@keyframes bounce {
+        0%, 100%
+
+    {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+
+    }
+
+    .unauthorized-card h3 {
+        font-size: 2rem;
+        color: #2d3748;
+        margin-bottom: 15px;
+        font-weight: 700;
+    }
+
+    .unauthorized-card p {
+        color: #718096;
+        margin-bottom: 35px;
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+
+    /* Main Container */
+    .student-courses {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 30px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    /* Header Bar */
+    .header-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        padding: 25px 35px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    }
+
+        .header-bar h2 {
+            color: #2d3748;
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+    .back-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+        .back-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+    /* Courses Container */
+    .courses-container {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 30px;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @@keyframes fadeIn {
+        from
+
+    {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+
+    }
+
+    /* Section Header */
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+        .section-header h3 {
+            font-size: 1.6rem;
+            color: #2d3748;
+            font-weight: 700;
+        }
+
+    /* Search Controls */
+    .search-controls {
+        flex: 1;
+        max-width: 400px;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 12px 20px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+        background: white;
+    }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+    /* Courses Grid */
+    .courses-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 25px;
+    }
+
+    /* Course Cards */
+    .course-card {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        animation: cardSlideUp 0.5s ease-out backwards;
+    }
+
+    @@keyframes cardSlideUp {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    }
+
+    .course-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    }
+
+    .course-header {
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 15px;
+    }
+
+    .course-title {
+        font-size: 1.3rem;
+        color: #2d3748;
+        margin-bottom: 10px;
+        font-weight: 700;
+    }
+
+    .course-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .course-professor {
+        color: #667eea;
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    /* Professor Rating */
+    .professor-rating {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        border-radius: 12px;
+        margin-top: 8px;
+    }
+
+    .rating-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #4a5568;
+    }
+
+    .rating-stars {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+    }
+
+    .star {
+        font-size: 1.5rem;
+        color: #e5e7eb;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+    }
+
+        .star.filled {
+            color: #fbbf24;
+            text-shadow: 0 2px 8px rgba(251, 191, 36, 0.4);
+        }
+
+        .star:hover {
+            transform: scale(1.2);
+        }
+
+    .rating-text {
+        font-size: 0.9rem;
+        color: #4a5568;
+        font-weight: 600;
+        margin-left: 8px;
+    }
+
+    .user-rating {
+        font-size: 0.85rem;
+        color: #667eea;
+        font-weight: 600;
+        font-style: italic;
+    }
+
+    /* Course Content */
+    .course-content {
+        flex: 1;
+    }
+
+    .course-description {
+        color: #4a5568;
+        line-height: 1.6;
+        margin-bottom: 15px;
+        font-size: 0.95rem;
+    }
+
+    .course-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .stat {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .stat-label {
+        font-weight: 600;
+        color: #2d3748;
+        font-size: 0.9rem;
+        min-width: 80px;
+    }
+
+    .difficulty-stars {
+        display: flex;
+        gap: 3px;
+        align-items: center;
+    }
+
+        .difficulty-stars .star {
+            font-size: 1.2rem;
+        }
+
+    .grading-method {
+        padding: 5px 12px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        color: #667eea;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    /* Course Actions */
+    .course-actions {
+        display: flex;
+        gap: 10px;
+        padding-top: 15px;
+        border-top: 2px solid #e2e8f0;
+    }
+
+    /* Enrolled Section */
+    .enrolled-section {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        height: fit-content;
+        position: sticky;
+        top: 30px;
+    }
+
+    .enrolled-courses-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .enrolled-course-item {
+        padding: 20px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        border-radius: 15px;
+        border-left: 4px solid #667eea;
+        transition: all 0.3s ease;
+    }
+
+        .enrolled-course-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+    .enrolled-course-info h5 {
+        font-size: 1.1rem;
+        color: #2d3748;
+        margin-bottom: 8px;
+        font-weight: 700;
+    }
+
+    .course-instructor {
+        color: #667eea;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+
+    .enrollment-date {
+        color: #718096;
+        font-size: 0.85rem;
+        margin-bottom: 10px;
+    }
+
+    .professor-rating-small {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        font-size: 0.85rem;
+        color: #4a5568;
+    }
+
+    .rating-stars-small {
+        display: flex;
+        gap: 2px;
+    }
+
+        .rating-stars-small .star {
+            font-size: 1rem;
+        }
+
+    .enrolled-course-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 15px;
+    }
+
+    /* No Content States */
+    .no-courses,
+    .no-enrollments,
+    .no-announcements {
+        text-align: center;
+        padding: 60px 20px;
+        color: #718096;
+        font-size: 1rem;
+    }
+
+    /* Modal */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    .modal-container {
+        background: white;
+        border-radius: 24px;
+        max-width: 700px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
+        animation: modalSlideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @@keyframes modalSlideUp {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(50px) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+
+    }
+
+    .modal-header {
+        padding: 30px;
+        border-bottom: 2px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(to right, #f8f9fa 0%, white 100%);
+    }
+
+    .modal-title {
+        font-size: 1.6rem;
+        color: #2d3748;
+        font-weight: 700;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 2rem;
+        cursor: pointer;
+        color: #adb5bd;
+        transition: all 0.3s ease;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+
+        .modal-close:hover {
+            background: #e9ecef;
+            color: #495057;
+            transform: rotate(90deg);
+        }
+
+    .modal-body {
+        padding: 30px;
+    }
+
+    .modal-footer {
+        padding: 25px 30px;
+        border-top: 2px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        background: #f8f9fa;
+    }
+
+    /* Course Info Section */
+    .course-info-section {
+        margin-bottom: 30px;
+    }
+
+        .course-info-section h4 {
+            font-size: 1.3rem;
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+    .course-details-grid {
+        display: grid;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .detail-item {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 15px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 12px;
+    }
+
+    .detail-label {
+        font-weight: 700;
+        color: #2d3748;
+    }
+
+    .detail-value {
+        color: #4a5568;
+    }
+
+    .course-description-full {
+        padding: 20px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        border-radius: 15px;
+        margin-top: 20px;
+    }
+
+        .course-description-full h5 {
+            font-size: 1.1rem;
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .course-description-full p {
+            color: #4a5568;
+            line-height: 1.6;
+        }
+
+    /* Announcements Section */
+    .announcements-section {
+        margin-top: 30px;
+    }
+
+        .announcements-section h4 {
+            font-size: 1.3rem;
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+    .announcements-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .announcement-item {
+        padding: 20px;
+        background: white;
+        border-radius: 15px;
+        border-left: 4px solid #667eea;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+        .announcement-item.urgent {
+            border-left-color: #ef4444;
+            background: rgba(239, 68, 68, 0.03);
+        }
+
+        .announcement-item.important {
+            border-left-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.03);
+        }
+
+    .announcement-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+        gap: 15px;
+    }
+
+    .announcement-title {
+        font-size: 1.1rem;
+        color: #2d3748;
+        font-weight: 700;
+    }
+
+    .announcement-priority {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+        .announcement-priority.urgent {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
+
+        .announcement-priority.important {
+            background: rgba(245, 158, 11, 0.15);
+            color: #d97706;
+        }
+
+        .announcement-priority.normal {
+            background: rgba(102, 126, 234, 0.15);
+            color: #667eea;
+        }
+
+    .announcement-meta {
+        margin-bottom: 12px;
+    }
+
+    .announcement-date {
+        font-size: 0.85rem;
+        color: #718096;
+    }
+
+    .announcement-content {
+        color: #4a5568;
+        line-height: 1.6;
+    }
+
+    /* Buttons */
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+    .btn-success {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-outline {
+        background: white;
+        color: #667eea;
+        border: 2px solid #667eea;
+    }
+
+        .btn-outline:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+    .btn-danger {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+        }
+
+    .btn-sm {
+        padding: 8px 16px;
+        font-size: 0.85rem;
+    }
+
+    .btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none !important;
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+    }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #653a8e 100%);
+        }
+
+    /* Responsive Design */
+    @@media (max-width: 1200px) {
+        .courses-container
+
+    {
+        grid-template-columns: 1fr;
+    }
+
+    .enrolled-section {
+        position: static;
+    }
+
+    }
+
+    @@media (max-width: 768px) {
+        .student-courses
+
+    {
+        padding: 20px;
+    }
+
+    .header-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+        padding: 20px;
+    }
+
+        .header-bar h2 {
+            font-size: 1.5rem;
+        }
+
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-controls {
+        max-width: 100%;
+    }
+
+    .courses-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .course-actions {
+        flex-direction: column;
+    }
+
+        .course-actions .btn {
+            width: 100%;
+        }
+
+    .enrolled-course-actions {
+        flex-direction: column;
+    }
+
+        .enrolled-course-actions .btn {
+            width: 100%;
+        }
+
+    .detail-item {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .modal-container {
+        width: 95%;
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding: 20px;
+    }
+
+    .modal-footer {
+        flex-direction: column;
+    }
+
+        .modal-footer .btn {
+            width: 100%;
+        }
+
+    .announcement-header {
+        flex-direction: column;
+    }
+
+    }
+</style>

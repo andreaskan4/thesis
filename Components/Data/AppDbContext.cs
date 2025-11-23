@@ -22,6 +22,10 @@ namespace Thesis.Data
         public DbSet<ProfessorProfileEntity> ProfessorProfiles { get; set; }
         public DbSet<Comment> Comments { get; set; }
         public DbSet<ProfessorRating> ProfessorRatings { get; set; }
+        public DbSet<Announcement> Announcements { get; set; }
+        public DbSet<CourseRating> CourseRatings { get; set; }
+        public DbSet<Exercise> Exercises { get; set; }
+        public DbSet<ExerciseSubmission> ExerciseSubmissions { get; set; }
 
         // ✅ Rename to match the actual table name
         public DbSet<AdminSystemSettings> AdminSystemSettings { get; set; }

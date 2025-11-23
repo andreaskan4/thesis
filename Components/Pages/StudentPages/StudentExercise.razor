@@ -1,0 +1,1683 @@
+﻿@page "/studentex"
+@inject AuthStateService AuthStateService
+@inject ExercisesService ExercisesService
+@inject GradesService GradesService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@using Microsoft.AspNetCore.Components.Forms
+
+<PageTitle>Thesis - Student Exercises</PageTitle>
+
+@if (!isAuthChecked)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading Exercises...</p>
+    </div>
+}
+else if (!isAuthorized)
+{
+    <div class="unauthorized-container">
+        <div class="unauthorized-card">
+            <div class="unauthorized-icon">🚫</div>
+            <h3>Access Denied</h3>
+            <p>You don't have permission to view exercises.</p>
+            <button class="btn btn-primary" @onclick="RedirectToHome">Return to Home</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="student-exercises">
+        <div class="header-bar">
+            <button class="back-btn" @onclick="GoBack">← Back to Dashboard</button>
+            <h2>Course Exercises</h2>
+            <div class="info-badge">Student View</div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading">Loading your exercises...</div>
+        }
+        else if (!enrolledCourses.Any())
+        {
+            <div class="no-data-message">
+                <h3>No Courses Enrolled</h3>
+                <p>You are not currently enrolled in any courses.</p>
+            </div>
+        }
+        else
+        {
+            <div class="exercises-container">
+                <!-- Left Panel: Course Selection and Exercises List -->
+                <div class="exercises-list-container">
+                    <div class="section-header">
+                        <h3>Available Exercises</h3>
+                    </div>
+
+                    <div class="course-selection">
+                        <label>Select Course:</label>
+                        <select @onchange="OnCourseSelected" value="@selectedCourseId">
+                            <option value="0">-- Choose a course --</option>
+                            @foreach (var course in enrolledCourses)
+                            {
+                                <option value="@course.Id">@course.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    @if (selectedCourse != null)
+                    {
+                        <div class="exercises-grid">
+                            @foreach (var exercise in exercises)
+                            {
+                                var submission = GetStudentSubmission(exercise.Id);
+                                var isOverdue = exercise.DueDate < DateTime.Now;
+                                var canSubmit = !isOverdue && (submission == null);
+
+                                <div class="exercise-card @(isOverdue ? "overdue" : "") @(submission != null ? "submitted" : "")">
+                                    <div class="exercise-header">
+                                        <h4>@exercise.Title</h4>
+                                        <div class="exercise-status">
+                                            @if (submission != null)
+                                            {
+                                                <span class="status submitted">Submitted</span>
+                                                @if (submission.Grade.HasValue)
+                                                {
+                                                    <span class="grade">Grade: @submission.Grade.Value.ToString("F1")/@exercise.MaxPoints</span>
+                                                }
+                                            }
+                                            else if (isOverdue)
+                                            {
+                                                <span class="status overdue">Overdue</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="status pending">Pending</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <p class="exercise-description">@exercise.Description</p>
+
+                                    <div class="exercise-details">
+                                        <div class="detail-item">
+                                            <strong>Due Date:</strong>
+                                            <span class="@(isOverdue ? "text-danger" : "text-muted")">
+                                                @exercise.DueDate.ToString("MMM dd, yyyy HH:mm")
+                                            </span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <strong>Points:</strong>
+                                            <span class="text-muted">@exercise.MaxPoints</span>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(exercise.Instructions))
+                                        {
+                                            <div class="detail-item">
+                                                <strong>Instructions:</strong>
+                                                <span class="text-muted">@exercise.Instructions</span>
+                                            </div>
+                                        }
+                                    </div>
+
+                                    <div class="exercise-actions">
+                                        @if (!string.IsNullOrEmpty(exercise.AttachmentPath))
+                                        {
+                                            <button class="btn-download" @onclick="() => DownloadFile(exercise.AttachmentPath)">
+                                                📎 Download Exercise File
+                                            </button>
+                                        }
+
+                                        @if (canSubmit)
+                                        {
+                                            <button class="btn-submit" @onclick="() => ShowSubmissionModal(exercise, submission)">
+                                                Submit Answer
+                                            </button>
+                                        }
+                                        else if (submission != null)
+                                        {
+                                            <button class="btn-view" @onclick="() => ViewSubmission(exercise, submission)">
+                                                View Submission
+                                            </button>
+                                        }
+                                    </div>
+
+                                    @if (submission != null)
+                                    {
+                                        <div class="submission-info">
+                                            <small>Submitted: @submission.SubmittedAt.ToString("MMM dd, yyyy HH:mm")</small>
+                                            @if (submission.Grade.HasValue)
+                                            {
+                                                <small>Graded: @submission.GradedAt?.ToString("MMM dd, yyyy HH:mm")</small>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @if (!exercises.Any())
+                            {
+                                <div class="no-exercises">
+                                    <p>No exercises available for this course yet.</p>
+                                    <p class="text-muted">Check back later for new assignments.</p>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <!-- Right Panel: Statistics and Info -->
+                <div class="info-container">
+                    <div class="stats-section">
+                        <h4>Your Progress</h4>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-number">@totalExercises</div>
+                                <div class="stat-label">Total Exercises</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">@submittedExercises</div>
+                                <div class="stat-label">Submitted</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">@gradedExercises</div>
+                                <div class="stat-label">Graded</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="quick-actions">
+                        <h4>Quick Actions</h4>
+                        <button class="action-btn" @onclick="RefreshExercises">
+                            🔄 Refresh Exercises
+                        </button>
+                    </div>
+
+                    <div class="deadlines-section">
+                        <h4>Upcoming Deadlines</h4>
+                        @if (upcomingExercises.Any())
+                        {
+                            <div class="deadlines-list">
+                                @foreach (var exercise in upcomingExercises.Take(3))
+                                {
+                                    <div class="deadline-item">
+                                        <strong>@exercise.Title</strong>
+                                        <span class="due-date">@exercise.DueDate.ToString("MMM dd")</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted">No upcoming deadlines.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<!-- Submission Modal -->
+@if (showSubmissionModal && selectedExercise != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Submit Answer: @selectedExercise.Title</h3>
+                <button class="close-btn" @onclick="CloseSubmissionModal">×</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="exercise-info">
+                    <p><strong>Description:</strong> @selectedExercise.Description</p>
+                    <p><strong>Due Date:</strong> @selectedExercise.DueDate.ToString("MMM dd, yyyy HH:mm")</p>
+                    <p><strong>Points:</strong> @selectedExercise.MaxPoints</p>
+                    @if (!string.IsNullOrEmpty(selectedExercise.Instructions))
+                    {
+                        <p><strong>Instructions:</strong> @selectedExercise.Instructions</p>
+                    }
+                </div>
+
+                <div class="form-field">
+                    <label>Your Answer *</label>
+                    <textarea @bind="submissionAnswer" class="form-textarea" rows="6"
+                              placeholder="Type your answer here..."></textarea>
+                </div>
+
+                <div class="form-field">
+                    <label>Upload File (Optional)</label>
+                    <InputFile OnChange="HandleFileUpload" class="file-input"
+                               accept=".pdf,.doc,.docx,.txt,.zip" />
+                    <small>Supported formats: PDF, DOC, DOCX, TXT, ZIP (Max 10MB)</small>
+
+                    @if (!string.IsNullOrEmpty(uploadedFileName))
+                    {
+                        <div class="file-preview">
+                            <span>Selected file: @uploadedFileName</span>
+                            <button type="button" class="remove-btn" @onclick="RemoveUploadedFile">Remove</button>
+                        </div>
+                    }
+                </div>
+
+                @if (existingSubmission != null)
+                {
+                    <div class="previous-submission">
+                        <h5>Previous Submission</h5>
+                        <p><strong>Submitted:</strong> @existingSubmission.SubmittedAt.ToString("MMM dd, yyyy HH:mm")</p>
+                        <p><strong>Your Answer:</strong> @existingSubmission.Answer</p>
+                        @if (!string.IsNullOrEmpty(existingSubmission.FilePath))
+                        {
+                            <p><strong>File:</strong> @GetFileName(existingSubmission.FilePath)</p>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="modal-actions">
+                <button class="save-btn" @onclick="SubmitAnswer" disabled="@(!CanSubmitAnswer())">
+                    @(existingSubmission != null ? "Update Submission" : "Submit Answer")
+                </button>
+                <button class="cancel-btn" @onclick="CloseSubmissionModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- View Submission Modal -->
+@if (showViewSubmissionModal && selectedSubmission != null && selectedExercise != null)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Your Submission: @selectedExercise.Title</h3>
+                <button class="close-btn" @onclick="CloseViewSubmissionModal">×</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="submission-details">
+                    <div class="detail-row">
+                        <strong>Submitted:</strong>
+                        <span>@selectedSubmission.SubmittedAt.ToString("MMM dd, yyyy HH:mm")</span>
+                    </div>
+
+                    @if (selectedSubmission.Grade.HasValue)
+                    {
+                        <div class="detail-row">
+                            <strong>Grade:</strong>
+                            <span class="grade-badge">@selectedSubmission.Grade.Value.ToString("F1")/@selectedExercise.MaxPoints</span>
+                        </div>
+                        <div class="detail-row">
+                            <strong>Graded On:</strong>
+                            <span>@selectedSubmission.GradedAt?.ToString("MMM dd, yyyy HH:mm")</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="detail-row">
+                            <strong>Status:</strong>
+                            <span class="status-pending">Not Graded Yet</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="submission-content">
+                    <h5>Your Answer:</h5>
+                    <div class="answer-content">
+                        @selectedSubmission.Answer
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(selectedSubmission.FilePath))
+                {
+                    <div class="submission-file">
+                        <h5>Attached File:</h5>
+                        <button class="btn-download" @onclick="() => DownloadFile(selectedSubmission.FilePath)">
+                            📎 Download @GetFileName(selectedSubmission.FilePath)
+                        </button>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-actions">
+                <button class="cancel-btn" @onclick="CloseViewSubmissionModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isAuthorized = false;
+    private bool isAuthChecked = false;
+    private bool isLoading = false;
+    private bool showSubmissionModal = false;
+    private bool showViewSubmissionModal = false;
+
+    private List<Course> enrolledCourses = new();
+    private List<Exercise> exercises = new();
+    private List<ExerciseSubmission> studentSubmissions = new();
+    private List<Exercise> upcomingExercises = new();
+
+    private int selectedCourseId = 0;
+    private Course? selectedCourse;
+    private Exercise? selectedExercise;
+    private ExerciseSubmission? selectedSubmission;
+    private ExerciseSubmission? existingSubmission;
+    private ElementReference fileInputRef;
+
+    private string submissionAnswer = "";
+    private string uploadedFileName = "";
+    private IBrowserFile? uploadedFile;
+
+    private int totalExercises = 0;
+    private int submittedExercises = 0;
+    private int gradedExercises = 0;
+    private int currentStudentId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await AuthStateService.InitializeAsync();
+            var user = AuthStateService.CurrentUser;
+
+            isAuthorized = user != null && user.Role == "Student";
+            isAuthChecked = true;
+
+            if (isAuthorized)
+            {
+                currentStudentId = user.Id;
+                await LoadStudentData();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing: {ex.Message}");
+            isAuthChecked = true;
+        }
+    }
+
+    private async Task LoadStudentData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Load enrolled courses
+            await LoadEnrolledCourses();
+
+            // Load all student submissions
+            await LoadStudentSubmissions();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading student data: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadEnrolledCourses()
+    {
+        try
+        {
+            // Get all courses and filter by enrollment
+            var allCourses = await GradesService.GetCoursesAsync();
+
+            // For now, we'll assume the student is enrolled in all courses
+            // You'll need to implement proper enrollment checking based on your database
+            enrolledCourses = allCourses.ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading enrolled courses: {ex.Message}");
+        }
+    }
+
+    private async Task LoadStudentSubmissions()
+    {
+        try
+        {
+            studentSubmissions = await ExercisesService.GetSubmissionsByStudentAsync(currentStudentId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading submissions: {ex.Message}");
+        }
+    }
+
+    private async Task LoadExercises(int courseId)
+    {
+        try
+        {
+            selectedCourse = enrolledCourses.FirstOrDefault(c => c.Id == courseId);
+            if (selectedCourse == null) return;
+
+            exercises = await ExercisesService.GetExercisesByCourseAsync(courseId);
+
+            // Filter to only published exercises
+            exercises = exercises.Where(e => e.IsPublished).ToList();
+
+            // Update upcoming exercises
+            upcomingExercises = exercises
+                .Where(e => e.DueDate > DateTime.Now)
+                .OrderBy(e => e.DueDate)
+                .ToList();
+
+            CalculateStatistics();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading exercises: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading exercises: {ex.Message}");
+        }
+    }
+
+    private async Task OnCourseSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int courseId))
+        {
+            selectedCourseId = courseId;
+            if (courseId > 0)
+            {
+                await LoadExercises(courseId);
+            }
+            else
+            {
+                selectedCourse = null;
+                exercises.Clear();
+                StateHasChanged();
+            }
+        }
+    }
+
+    private ExerciseSubmission? GetStudentSubmission(int exerciseId)
+    {
+        return studentSubmissions.FirstOrDefault(s => s.ExerciseId == exerciseId);
+    }
+
+    private void CalculateStatistics()
+    {
+        totalExercises = exercises.Count;
+        submittedExercises = exercises.Count(e => GetStudentSubmission(e.Id) != null);
+        gradedExercises = studentSubmissions.Count(s => s.Grade.HasValue);
+    }
+
+    private void ShowSubmissionModal(Exercise exercise, ExerciseSubmission? submission)
+    {
+        selectedExercise = exercise;
+        existingSubmission = submission;
+        submissionAnswer = submission?.Answer ?? "";
+        uploadedFileName = "";
+        uploadedFile = null;
+        showSubmissionModal = true;
+        StateHasChanged();
+    }
+
+    private void ViewSubmission(Exercise exercise, ExerciseSubmission submission)
+    {
+        selectedExercise = exercise;
+        selectedSubmission = submission;
+        showViewSubmissionModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseSubmissionModal()
+    {
+        showSubmissionModal = false;
+        selectedExercise = null;
+        existingSubmission = null;
+        submissionAnswer = "";
+        uploadedFileName = "";
+        uploadedFile = null;
+        StateHasChanged();
+    }
+
+    private void CloseViewSubmissionModal()
+    {
+        showViewSubmissionModal = false;
+        selectedExercise = null;
+        selectedSubmission = null;
+        StateHasChanged();
+    }
+
+    private void HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 10 * 1024 * 1024) // 10MB limit
+        {
+            JSRuntime.InvokeVoidAsync("alert", "File size must be less than 10MB.");
+            return;
+        }
+
+        uploadedFile = file;
+        uploadedFileName = file.Name;
+        StateHasChanged();
+    }
+
+    private void RemoveUploadedFile()
+    {
+        uploadedFile = null;
+        uploadedFileName = "";
+        StateHasChanged();
+    }
+
+    private bool CanSubmitAnswer()
+    {
+        return !string.IsNullOrWhiteSpace(submissionAnswer) &&
+               selectedExercise != null &&
+               selectedExercise.DueDate > DateTime.Now;
+    }
+
+    private async Task SubmitAnswer()
+    {
+        if (!CanSubmitAnswer()) return;
+
+        try
+        {
+            if (existingSubmission != null)
+            {
+                // Update existing submission
+                existingSubmission.Answer = submissionAnswer;
+                existingSubmission.SubmittedAt = DateTime.Now;
+
+                // Handle file upload - in a real app, you'd save the file and update the path
+                if (uploadedFile != null)
+                {
+                    existingSubmission.FilePath = $"submissions/{currentStudentId}/{selectedExercise.Id}/{uploadedFileName}";
+                }
+
+                await ExercisesService.UpdateSubmissionAsync(existingSubmission);
+            }
+            else
+            {
+                // Create new submission
+                var submission = new ExerciseSubmission
+                {
+                    ExerciseId = selectedExercise.Id,
+                    StudentId = currentStudentId,
+                    Answer = submissionAnswer,
+                    SubmittedAt = DateTime.Now
+                };
+
+                // Handle file upload
+                if (uploadedFile != null)
+                {
+                    submission.FilePath = $"submissions/{currentStudentId}/{selectedExercise.Id}/{uploadedFileName}";
+                }
+
+                await ExercisesService.AddSubmissionAsync(submission);
+            }
+
+            // Refresh data
+            await LoadStudentSubmissions();
+            await LoadExercises(selectedCourseId);
+
+            CloseSubmissionModal();
+            await JSRuntime.InvokeVoidAsync("alert", "Submission saved successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error submitting answer: {ex.Message}");
+        }
+    }
+
+    private async Task DownloadFile(string filePath)
+    {
+        try
+        {
+            // Implement file download logic
+            await JSRuntime.InvokeVoidAsync("open", $"/files/{filePath}", "_blank");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error downloading file: {ex.Message}");
+        }
+    }
+
+    private string GetFileName(string filePath)
+    {
+        return System.IO.Path.GetFileName(filePath);
+    }
+
+    private async Task RefreshExercises()
+    {
+        if (selectedCourseId > 0)
+        {
+            await LoadExercises(selectedCourseId);
+            await JSRuntime.InvokeVoidAsync("alert", "Exercises refreshed!");
+        }
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/studenthome");
+    private void RedirectToHome() => Navigation.NavigateTo("/");
+}
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    /* Loading and Auth States */
+    .loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .spinner {
+        width: 60px;
+        height: 60px;
+        border: 5px solid rgba(255, 255, 255, 0.2);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s ease-in-out infinite;
+    }
+
+    @@keyframes spin {
+        to
+
+    {
+        transform: rotate(360deg);
+    }
+
+    }
+
+    .loading-container p {
+        margin-top: 25px;
+        color: white;
+        font-size: 1.2rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    .unauthorized-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+    }
+
+    .unauthorized-card {
+        background: white;
+        padding: 60px 50px;
+        border-radius: 24px;
+        text-align: center;
+        box-shadow: 0 25px 80px rgba(0, 0, 0, 0.25);
+        max-width: 450px;
+        animation: slideUp 0.4s ease-out;
+    }
+
+    @@keyframes slideUp {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    }
+
+    .unauthorized-icon {
+        font-size: 5rem;
+        margin-bottom: 25px;
+        animation: bounce 2s ease-in-out infinite;
+    }
+
+    @@keyframes bounce {
+        0%, 100%
+
+    {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+
+    }
+
+    .unauthorized-card h3 {
+        font-size: 2rem;
+        color: #2d3748;
+        margin-bottom: 15px;
+        font-weight: 700;
+    }
+
+    .unauthorized-card p {
+        color: #718096;
+        margin-bottom: 35px;
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+
+    /* Main Container */
+    .student-exercises {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 30px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    /* Header Bar */
+    .header-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        padding: 25px 35px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+
+        .header-bar h2 {
+            color: #2d3748;
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+    .info-badge {
+        padding: 8px 16px;
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+        color: #059669;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        border: 2px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .back-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+        .back-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+    /* Loading & No Data States */
+    .loading,
+    .no-data-message {
+        text-align: center;
+        padding: 60px 40px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    }
+
+        .no-data-message h3 {
+            font-size: 1.8rem;
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .no-data-message p {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+    /* Exercises Container */
+    .exercises-container {
+        display: grid;
+        grid-template-columns: 1fr 350px;
+        gap: 30px;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @@keyframes fadeIn {
+        from
+
+    {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+
+    }
+
+    /* Section Header */
+    .section-header {
+        margin-bottom: 25px;
+    }
+
+        .section-header h3 {
+            font-size: 1.6rem;
+            color: #2d3748;
+            font-weight: 700;
+        }
+
+    /* Course Selection */
+    .course-selection {
+        background: white;
+        padding: 25px;
+        border-radius: 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        margin-bottom: 30px;
+    }
+
+        .course-selection label {
+            display: block;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .course-selection select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            background: white;
+            color: #2d3748;
+            cursor: pointer;
+        }
+
+            .course-selection select:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            }
+
+    /* Exercises Grid */
+    .exercises-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    /* Exercise Card */
+    .exercise-card {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        border-left: 4px solid #667eea;
+        animation: cardSlideUp 0.5s ease-out backwards;
+    }
+
+    @@keyframes cardSlideUp {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    }
+
+    .exercise-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    }
+
+    .exercise-card.submitted {
+        border-left-color: #10b981;
+        background: linear-gradient(to right, rgba(16, 185, 129, 0.02) 0%, white 100%);
+    }
+
+    .exercise-card.overdue {
+        border-left-color: #ef4444;
+        background: linear-gradient(to right, rgba(239, 68, 68, 0.02) 0%, white 100%);
+    }
+
+    .exercise-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 15px;
+        gap: 15px;
+    }
+
+        .exercise-header h4 {
+            font-size: 1.3rem;
+            color: #2d3748;
+            font-weight: 700;
+            flex: 1;
+        }
+
+    .exercise-status {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .status {
+        padding: 6px 14px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+        .status.submitted {
+            background: rgba(16, 185, 129, 0.15);
+            color: #059669;
+        }
+
+        .status.pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: #d97706;
+        }
+
+        .status.overdue {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
+
+    .grade {
+        padding: 6px 14px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+        color: #667eea;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+
+    .exercise-description {
+        color: #4a5568;
+        line-height: 1.6;
+        margin-bottom: 20px;
+        font-size: 0.95rem;
+    }
+
+    .exercise-details {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        margin-bottom: 15px;
+    }
+
+    .detail-item {
+        display: flex;
+        gap: 10px;
+    }
+
+        .detail-item strong {
+            color: #2d3748;
+            min-width: 120px;
+        }
+
+    .text-muted {
+        color: #718096;
+    }
+
+    .text-danger {
+        color: #ef4444;
+        font-weight: 600;
+    }
+
+    .exercise-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding-top: 15px;
+        border-top: 2px solid #e2e8f0;
+    }
+
+    .btn-download,
+    .btn-submit,
+    .btn-view {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .btn-download {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        color: #667eea;
+        border: 2px solid rgba(102, 126, 234, 0.2);
+    }
+
+        .btn-download:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+    .btn-submit {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+
+    .btn-view {
+        background: white;
+        color: #667eea;
+        border: 2px solid #667eea;
+    }
+
+        .btn-view:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+    .submission-info {
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+        .submission-info small {
+            color: #718096;
+            font-size: 0.85rem;
+        }
+
+    /* No Exercises State */
+    .no-exercises {
+        text-align: center;
+        padding: 60px 40px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    }
+
+        .no-exercises p {
+            color: #718096;
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+
+    /* Info Container (Right Sidebar) */
+    .info-container {
+        display: flex;
+        flex-direction: column;
+        gap: 25px;
+    }
+
+    .stats-section,
+    .quick-actions,
+    .deadlines-section {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    }
+
+        .stats-section h4,
+        .quick-actions h4,
+        .deadlines-section h4 {
+            font-size: 1.2rem;
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-weight: 700;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        gap: 15px;
+    }
+
+    .stat-card {
+        padding: 20px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        border-radius: 15px;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        }
+
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #667eea;
+        margin-bottom: 8px;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        color: #4a5568;
+        font-weight: 600;
+    }
+
+    /* Quick Actions */
+    .action-btn {
+        width: 100%;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        color: #667eea;
+        border: 2px solid rgba(102, 126, 234, 0.2);
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        text-align: left;
+    }
+
+        .action-btn:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+            transform: translateX(5px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+    /* Deadlines List */
+    .deadlines-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .deadline-item {
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.3s ease;
+    }
+
+        .deadline-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .deadline-item strong {
+            color: #2d3748;
+            font-size: 0.95rem;
+        }
+
+    .due-date {
+        color: #667eea;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        background: rgba(102, 126, 234, 0.1);
+        border-radius: 8px;
+    }
+
+    /* Modal */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 24px;
+        max-width: 700px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
+        animation: modalSlideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @@keyframes modalSlideUp {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(50px) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+
+    }
+
+    .modal-header {
+        padding: 30px;
+        border-bottom: 2px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(to right, #f8f9fa 0%, white 100%);
+    }
+
+        .modal-header h3 {
+            font-size: 1.6rem;
+            color: #2d3748;
+            font-weight: 700;
+        }
+
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 2rem;
+        cursor: pointer;
+        color: #adb5bd;
+        transition: all 0.3s ease;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    }
+
+        .close-btn:hover {
+            background: #e9ecef;
+            color: #495057;
+            transform: rotate(90deg);
+        }
+
+    .modal-body {
+        padding: 30px;
+    }
+
+    .exercise-info {
+        padding: 20px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        border-radius: 15px;
+        margin-bottom: 25px;
+    }
+
+        .exercise-info p {
+            margin-bottom: 10px;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+
+    .form-field {
+        margin-bottom: 20px;
+    }
+
+        .form-field label {
+            display: block;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+    .form-textarea {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+        font-family: inherit;
+        resize: vertical;
+    }
+
+        .form-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+    .file-input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px dashed #e2e8f0;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+        .file-input:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+    .form-field small {
+        display: block;
+        margin-top: 8px;
+        color: #718096;
+        font-size: 0.85rem;
+    }
+
+    .file-preview {
+        margin-top: 15px;
+        padding: 12px 16px;
+        background: #f8f9fa;
+        border-radius: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .remove-btn {
+        padding: 6px 12px;
+        background: #ef4444;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+        .remove-btn:hover {
+            background: #dc2626;
+            transform: scale(1.05);
+        }
+
+    .previous-submission {
+        padding: 20px;
+        background: #fff9e6;
+        border-left: 4px solid #f59e0b;
+        border-radius: 12px;
+        margin-top: 20px;
+    }
+
+        .previous-submission h5 {
+            color: #d97706;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .previous-submission p {
+            margin-bottom: 10px;
+            color: #4a5568;
+        }
+
+    .modal-actions {
+        padding: 25px 30px;
+        border-top: 2px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        background: #f8f9fa;
+    }
+
+    .save-btn,
+    .cancel-btn {
+        padding: 12px 28px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .save-btn {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+
+        .save-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        .save-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+    .cancel-btn {
+        background: white;
+        color: #4a5568;
+        border: 2px solid #e2e8f0;
+    }
+
+        .cancel-btn:hover {
+            background: #f8f9fa;
+            border-color: #cbd5e1;
+        }
+
+    /* Submission Details */
+    .submission-details {
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 15px;
+        margin-bottom: 25px;
+    }
+
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-row strong {
+            color: #2d3748;
+        }
+
+        .detail-row span {
+            color: #4a5568;
+        }
+
+    .grade-badge {
+        padding: 6px 14px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        font-weight: 700;
+    }
+
+    .status-pending {
+        color: #f59e0b;
+        font-weight: 600;
+    }
+
+    .submission-content {
+        margin-bottom: 25px;
+    }
+
+        .submission-content h5 {
+            font-size: 1.1rem;
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+    .answer-content {
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        color: #4a5568;
+        line-height: 1.6;
+    }
+
+    .submission-file h5 {
+        font-size: 1.1rem;
+        color: #2d3748;
+        margin-bottom: 15px;
+        font-weight: 700;
+    }
+
+    /* Buttons */
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+    }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #653a8e 100%);
+        }
+
+    /* Responsive Design */
+    @@media (max-width: 1200px) {
+        .exercises-container
+
+    {
+        grid-template-columns: 1fr;
+    }
+
+    .info-container {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        grid-auto-flow: dense;
+    }
+
+    }
+
+    @@media (max-width: 768px) {
+        .student-exercises
+
+    {
+        padding: 20px;
+    }
+
+    .header-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 20px;
+    }
+
+        .header-bar h2 {
+            font-size: 1.5rem;
+        }
+
+    .exercise-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .exercise-status {
+        width: 100%;
+    }
+
+    .exercise-actions {
+        flex-direction: column;
+    }
+
+        .exercise-actions button {
+            width: 100%;
+        }
+
+    .detail-item {
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .modal-content {
+        width: 95%;
+    }
+
+    .modal-header,
+    .modal-body,
+    .modal-actions {
+        padding: 20px;
+    }
+
+    .modal-actions {
+        flex-direction: column;
+    }
+
+    .save-btn,
+    .cancel-btn {
+        width: 100%;
+    }
+
+    .detail-row {
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    }
+</style>

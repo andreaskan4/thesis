@@ -158,6 +158,13 @@ public class GradesService
         _context.Schedules.Add(schedule);
         await _context.SaveChangesAsync();
     }
+    public async Task<List<Enrollment>> GetEnrollmentsForCourseAsync(int courseId)
+    {
+        return await _context.Enrollments
+            .Where(e => e.CourseId == courseId)
+            .Include(e => e.Student)
+            .ToListAsync();
+    }
 
     public async Task DeleteScheduleAsync(int id)
     {

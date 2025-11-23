@@ -14,6 +14,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<AuthStateService>();
 builder.Services.AddScoped<GradesService>();
+builder.Services.AddScoped<ExercisesService>();
 
 
 var app = builder.Build();

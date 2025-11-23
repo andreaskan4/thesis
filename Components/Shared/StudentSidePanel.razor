@@ -1,94 +1,71 @@
 ﻿@inject AuthStateService AuthStateService
 @inject NavigationManager Navigation
 
-
-<div style="width: 280px; height: 100vh; background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%); color: white; display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.1);">
-    <div style="padding: 1.5rem 1.5rem 1rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-        <h3 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: white;">Thesis App</h3>
-    </div>
-
-    <!-- Menu -->
-    <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 1rem 0;">
-        <ul style="list-style: none; padding: 0; margin: 0;">
-            <li>
-                <NavLink href="/" class="nav-link" activeClass="active">
-                    <span class="icon">📊</span>
-                    <span>Dashboard</span>
-                </NavLink>
-            </li>
-            <li>
-                <NavLink href="/profile" class="nav-link" activeClass="active">
-                    <span class="icon">👤</span>
-                    <span>Profile</span>
-                </NavLink>
-            </li>
-            <li>
-                <NavLink href="/settings" class="nav-link" activeClass="active">
-                    <span class="icon">⚙️</span>
-                    <span>Settings</span>
-                </NavLink>
-            </li>
-            <li>
-                <NavLink href="/calendar" class="nav-link" activeClass="active">
-                    <span class="icon">📅</span>
-                    <span>Calendar</span>
-                </NavLink>
-            </li>
-            <li>
-                <NavLink href="/grades" class="nav-link" activeClass="active">
-                    <span class="icon">📈</span>
-                    <span>Grades</span>
-                </NavLink>
-            </li>
-            <li>
-                <NavLink href="/secretary" class="nav-link" activeClass="active">
-                    <span class="icon">💼</span>
-                    <span>Secretary</span>
-                </NavLink>
-            </li>
-            <li>
-                <NavLink href="/housing" class="nav-link" activeClass="active">
-                    <span class="icon">🏠</span>
-                    <span>Housing</span>
-                </NavLink>
-            </li>
-            <li>
-                <NavLink href="/food" class="nav-link" activeClass="active">
-                    <span class="icon">🍽️</span>
-                    <span>Food</span>
-                </NavLink>
-            </li>
-            <li>
-                <NavLink href="/courses" class="nav-link" activeClass="active">
-                    <span class="icon">📚</span>
-                    <span>Courses</span>
-                </NavLink>
-            </li>
-
-            <li style="height: 1px; background: rgba(255,255,255,0.1); margin: 0.5rem 1.5rem;"></li>
-
-            <li>
-                <a href="#" @onclick="ShowLogoutConfirmation" class="nav-link logout">
-                    <span class="icon">🚪</span>
-                    <span>Logout</span>
-                </a>
-            </li>
-        </ul>
-
-        <!-- User Info -->
-        <div style="padding: 1.5rem; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 0.75rem;">
-            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem;">
-                @GetUserInitials()
-            </div>
-            <div style="flex: 1;">
-                <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.125rem;">@AuthStateService.CurrentUser?.Name</div>
-                <div style="font-size: 0.75rem; opacity: 0.8;">@AuthStateService.CurrentUser?.Role</div>
-            </div>
+<div class="admin-sidebar">
+    <div class="sidebar-header">
+        <div class="app-logo">
+            <h3>Gnosis Portal</h3>
         </div>
     </div>
-</div>
 
-<!-- Logout Modal -->
+    <nav class="sidebar-nav">
+        <a class="nav-item active" href="/studenthome">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Dashboard</span>
+        </a>
+        <a class="nav-item" href="/studentprofile">
+            <span class="nav-icon">👤</span>
+            <span class="nav-text">Profile</span>
+        </a>
+        <a class="nav-item" href="/studentgrades">
+            <span class="nav-icon">📈</span>
+            <span class="nav-text">Grades</span>
+        </a>
+        <a class="nav-item" href="/studentcourses">
+            <span class="nav-icon">📚</span>
+            <span class="nav-text">Course Management</span>
+        </a>
+        <a class="nav-item" href="/studentex">
+            <span class="nav-icon">📝</span>
+            <span class="nav-text">Exercises</span>
+        </a>
+        <a class="nav-item" href="/studentmessages">
+            <span class="nav-icon">📝</span>
+            <span class="nav-text">Requests & DMs</span>
+        </a>
+        <a class="nav-item" href="/studentforums">
+            <span class="nav-icon">📝</span>
+            <span class="nav-text">Forums</span>
+        </a>
+        <a class="nav-item" href="/studenthousing">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-text">Housing Info</span>
+        </a>
+        <a class="nav-item" href="/studentfood">
+            <span class="nav-icon">🍽️</span>
+            <span class="nav-text">Food</span>
+        </a>
+        <div class="nav-divider"></div>
+        <a class="nav-item" href="/studentsettings">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-text">User Settings</span>
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <div class="user-info">
+            <div class="user-avatar">@GetUserInitials()</div>
+            <div class="user-details">
+                <div class="user-name">@AuthStateService.CurrentUser?.Name</div>
+                <div class="user-role">Student</div>
+            </div>
+        </div>
+        <button class="logout-btn" @onclick="ShowLogoutConfirmation">
+            <span class="logout-icon">🚪</span>
+            Logout
+        </button>
+    </div>
+</div>
 @if (showLogoutModal)
 {
     <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
@@ -100,35 +77,164 @@
                 <p style="margin: 0; color: #64748b;">Are you sure you want to log out?</p>
             </div>
             <div style="padding: 1.5rem; border-top: 1px solid #e2e8f0; display: flex; gap: 0.75rem; justify-content: flex-end;">
-                <button type="button" class="btn-cancel" @onclick="CloseLogoutModal">Cancel</button>
-                <button type="button" class="btn-logout" @onclick="ConfirmLogout">Logout</button>
+                <button type="button" style="padding: 0.75rem 1.5rem; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; background: white; color: #374151;" @onclick="CloseLogoutModal">Cancel</button>
+                <button type="button" style="padding: 0.75rem 1.5rem; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; background: #ef4444; color: white;" @onclick="ConfirmLogout">Logout</button>
             </div>
         </div>
     </div>
 }
-
 @code {
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = default!;
+
     private bool showLogoutModal = false;
 
-    private void ShowLogoutConfirmation() => showLogoutModal = true;
-    private void CloseLogoutModal() => showLogoutModal = false;
+    private string GetUserInitials()
+    {
+        var name = AuthStateService.CurrentUser?.Name ?? "";
+        if (string.IsNullOrEmpty(name)) return "P";
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+
+        return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
+    }
+
+    private void ShowLogoutConfirmation()
+    {
+        showLogoutModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseLogoutModal()
+    {
+        showLogoutModal = false;
+        StateHasChanged();
+    }
 
     private async Task ConfirmLogout()
     {
         showLogoutModal = false;
         StateHasChanged();
+
         await AuthStateService.LogoutAsync();
-        Navigation.NavigateTo("/", true);
-    }
-
-    private string GetUserInitials()
-    {
-        var name = AuthStateService.CurrentUser?.Name ?? "";
-        if (string.IsNullOrWhiteSpace(name)) return "U";
-
-        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length >= 2
-            ? $"{parts[0][0]}{parts[1][0]}".ToUpper()
-            : name[..Math.Min(2, name.Length)].ToUpper();
+        NavigationManager.NavigateTo("/", true);
     }
 }
+<style>
+    .admin-sidebar {
+        width: 280px;
+        background: linear-gradient(180deg, #1e3a8a 0%, #3730a3 100%);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    }
+
+    .sidebar-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .app-logo h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+
+    .sidebar-nav {
+        flex: 1;
+        padding: 1rem 0;
+    }
+
+    .nav-item {
+        display: flex;
+        align-items: center;
+        padding: 0.875rem 1.5rem;
+        color: rgba(255,255,255,0.8);
+        text-decoration: none;
+        border-left: 3px solid transparent;
+        transition: all 0.2s ease;
+    }
+
+        .nav-item:hover, .nav-item.active {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border-left-color: #60a5fa;
+        }
+
+    .nav-icon {
+        margin-right: 0.75rem;
+        font-size: 1.125rem;
+    }
+
+    .nav-text {
+        font-weight: 500;
+    }
+
+    .nav-divider {
+        height: 1px;
+        background: rgba(255,255,255,0.1);
+        margin: 1rem 1.5rem;
+    }
+
+    .sidebar-footer {
+        padding: 1.5rem;
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #60a5fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .user-details {
+        flex: 1;
+    }
+
+    .user-name {
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .user-role {
+        font-size: 0.75rem;
+        color: rgba(255,255,255,0.7);
+    }
+
+    .logout-btn {
+        width: 100%;
+        background: rgba(255,255,255,0.1);
+        color: white;
+        border: 1px solid rgba(255,255,255,0.2);
+        padding: 0.75rem;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.2s ease;
+    }
+
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+</style>

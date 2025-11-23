@@ -1,184 +1,76 @@
-/* Modal Styles */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-    width: 90%;
-    max-width: 400px;
-    overflow: hidden;
-}
-
-.modal-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-    .modal-header h3 {
-        margin: 0;
-        font-size: 1.25rem;
-        color: #1e293b;
-    }
-
-.modal-body {
-    padding: 1.5rem;
-}
-
-    .modal-body p {
-        margin: 0;
-        color: #64748b;
-    }
-
-.modal-footer {
-    padding: 1.5rem;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    gap: 0.75rem;
-    justify-content: flex-end;
-}
-
-/* Button Styles for Modal */
-.btn {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.btn-outline {
-    background: white;
-    color: #374151;
-    border: 1px solid #d1d5db;
-}
-
-    .btn-outline:hover {
-        background: #f9fafb;
-        border-color: #9ca3af;
-    }
-
-.btn-danger {
-    background: #ef4444;
-    color: white;
-}
-
-    .btn-danger:hover {
-        background: #dc2626;
-    }
-/* Side Panel Styles */
-.side-panel {
+.admin-sidebar {
     width: 280px;
-    background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%);
+    background: linear-gradient(180deg, #1e3a8a 0%, #3730a3 100%);
     color: white;
     display: flex;
     flex-direction: column;
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-    z-index: 1000;
 }
 
-.panel-header {
-    padding: 1.5rem 1.5rem 1rem 1.5rem;
+.sidebar-header {
+    padding: 1.5rem;
     border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
 .app-logo h3 {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 700;
-    color: white;
 }
 
-.panel-content {
+.sidebar-nav {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
     padding: 1rem 0;
 }
 
-.nav-links {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.nav-link {
+.nav-item {
     display: flex;
     align-items: center;
-    padding: 0.75rem 1.5rem;
+    padding: 0.875rem 1.5rem;
     color: rgba(255,255,255,0.8);
     text-decoration: none;
-    transition: all 0.3s ease;
     border-left: 3px solid transparent;
+    transition: all 0.2s ease;
 }
 
-    .nav-link:hover {
+    .nav-item:hover, .nav-item.active {
         background: rgba(255,255,255,0.1);
         color: white;
-        border-left-color: rgba(255,255,255,0.5);
-    }
-
-    .nav-link.active {
-        background: rgba(255,255,255,0.15);
-        color: white;
-        border-left-color: white;
-        font-weight: 600;
+        border-left-color: #60a5fa;
     }
 
 .nav-icon {
-    font-size: 1.25rem;
     margin-right: 0.75rem;
-    width: 24px;
-    text-align: center;
+    font-size: 1.125rem;
 }
 
 .nav-text {
-    font-size: 0.95rem;
     font-weight: 500;
 }
 
 .nav-divider {
     height: 1px;
     background: rgba(255,255,255,0.1);
-    margin: 0.5rem 1.5rem;
+    margin: 1rem 1.5rem;
 }
 
-.logout-link {
-    color: #fca5a5;
+.sidebar-footer {
+    padding: 1.5rem;
+    border-top: 1px solid rgba(255,255,255,0.1);
 }
-
-    .logout-link:hover {
-        color: #fecaca;
-        background: rgba(239, 68, 68, 0.1);
-    }
 
 .user-info {
-    padding: 1.5rem;
-    background: rgba(0,0,0,0.2);
-    border-top: 1px solid rgba(255,255,255,0.1);
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    margin-bottom: 1rem;
 }
 
 .user-avatar {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #60a5fa;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -192,11 +84,30 @@
 
 .user-name {
     font-weight: 600;
-    font-size: 0.95rem;
-    margin-bottom: 0.125rem;
+    font-size: 0.875rem;
 }
 
 .user-role {
     font-size: 0.75rem;
-    opacity: 0.8;
+    color: rgba(255,255,255,0.7);
 }
+
+.logout-btn {
+    width: 100%;
+    background: rgba(255,255,255,0.1);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+    .logout-btn:hover {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.3);
+    }

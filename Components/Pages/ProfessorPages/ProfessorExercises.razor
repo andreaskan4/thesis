@@ -1,0 +1,1257 @@
+﻿@page "/profex"
+@inject AuthStateService AuthStateService
+@inject GradesService GradesService
+@inject ExercisesService ExercisesService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Thesis - Professor Exercises</PageTitle>
+
+@if (!isAuthChecked)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading Exercises Management...</p>
+    </div>
+}
+else if (!isAuthorized)
+{
+    <div class="unauthorized-container">
+        <div class="unauthorized-card">
+            <div class="unauthorized-icon">🚫</div>
+            <h3>Access Denied</h3>
+            <p>You don't have permission to manage exercises.</p>
+            <button class="btn btn-primary" @onclick="RedirectToHome">Return to Home</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="professor-exercises">
+        <div class="header-bar">
+            <button class="back-btn" @onclick="GoBack">← Back to Dashboard</button>
+            <h2>Manage Exercises & Submissions</h2>
+            <div class="info-badge">Professor View</div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading">Loading courses and exercises...</div>
+        }
+        else if (!courses.Any())
+        {
+            <div class="no-data-message">
+                <h3>No Courses Assigned</h3>
+                <p>You are not currently teaching any courses.</p>
+            </div>
+        }
+        else
+        {
+            <div class="exercises-container">
+                <!-- Left Panel: Exercises List -->
+                <div class="exercises-list-container">
+                    <div class="section-header">
+                        <h3>Exercises</h3>
+                        <button class="add-btn" @onclick="ShowAddExerciseModal">+ Add Exercise</button>
+                    </div>
+
+                    <div class="course-selection">
+                        <label>Select Course:</label>
+                        <select @onchange="OnCourseSelected" value="@selectedCourseId">
+                            <option value="0">-- Choose a course --</option>
+                            @foreach (var course in courses)
+                            {
+                                <option value="@course.Id">@course.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    @if (selectedCourse != null)
+                    {
+                        <div class="exercises-grid">
+                            @foreach (var exercise in exercises)
+                            {
+                                var submissionCount = submissionCounts.ContainsKey(exercise.Id) ? submissionCounts[exercise.Id] : 0;
+                                <div class="exercise-card">
+                                    <div class="exercise-header">
+                                        <h4>@exercise.Title</h4>
+                                        <div class="exercise-actions">
+                                            <button class="edit-btn" @onclick="() => EditExercise(exercise)">Edit</button>
+                                            <button class="delete-btn" @onclick="() => DeleteExercise(exercise.Id)">Delete</button>
+                                        </div>
+                                    </div>
+                                    <p class="exercise-description">@exercise.Description</p>
+                                    <div class="exercise-details">
+                                        <span class="due-date">Due: @exercise.DueDate.ToString("MMM dd, yyyy")</span>
+                                        <span class="submissions">Submissions: @submissionCount</span>
+                                    </div>
+                                    <div class="exercise-meta">
+                                        <span class="points">@exercise.MaxPoints points</span>
+                                        <span class="status @(exercise.IsPublished ? "published" : "draft")">
+                                            @(exercise.IsPublished ? "Published" : "Draft")
+                                        </span>
+                                    </div>
+                                    <button class="view-submissions-btn" @onclick="() => ViewSubmissions(exercise)">
+                                        View Submissions (@submissionCount)
+                                    </button>
+                                </div>
+                            }
+
+                            @if (!exercises.Any())
+                            {
+                                <div class="no-exercises">
+                                    <p>No exercises created for this course yet.</p>
+                                    <button class="add-btn" @onclick="ShowAddExerciseModal">Create Your First Exercise</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <!-- Right Panel: Submissions or Exercise Details -->
+                <div class="details-container">
+                    @if (selectedExercise != null && showSubmissions)
+                    {
+                        <div class="submissions-section">
+                            <div class="section-header">
+                                <h3>Submissions for @selectedExercise.Title</h3>
+                                <button class="back-btn" @onclick="CloseSubmissions">← Back to Exercises</button>
+                            </div>
+
+                            @if (submissions.Any())
+                            {
+                                <div class="submissions-list">
+                                    @foreach (var submission in submissions)
+                                    {
+                                        <div class="submission-card">
+                                            <div class="submission-header">
+                                                <h5>@submission.Student?.Name @submission.Student?.LastName</h5>
+                                                <span class="submission-date">
+                                                    Submitted: @submission.SubmittedAt.ToString("MMM dd, yyyy HH:mm")
+                                                </span>
+                                            </div>
+                                            <div class="submission-content">
+                                                <p><strong>Answer:</strong> @submission.Answer</p>
+                                                @if (!string.IsNullOrEmpty(submission.FilePath))
+                                                {
+                                                    <div class="submission-file">
+                                                        <strong>File:</strong>
+                                                        <a href="/files/@submission.FilePath" target="_blank" class="file-link">
+                                                            Download Attachment
+                                                        </a>
+                                                    </div>
+                                                }
+                                            </div>
+                                            <div class="submission-grading">
+                                                <div class="grade-input-group">
+                                                    <label>Grade (0-@selectedExercise.MaxPoints):</label>
+                                                    <input type="number"
+                                                           step="0.1"
+                                                           min="0"
+                                                           max="@selectedExercise.MaxPoints"
+                                                           @bind="submission.Grade"
+                                                           class="grade-input" />
+                                                </div>
+                                                <div class="grading-actions">
+                                                    <button class="save-grade-btn"
+                                                            @onclick="() => SaveSubmissionGrade(submission)"
+                                                            disabled="@(!IsValidGrade(submission.Grade, selectedExercise.MaxPoints))">
+                                                        Save Grade
+                                                    </button>
+                                                    @if (submission.Grade.HasValue)
+                                                    {
+                                                        <span class="current-grade">
+                                                            Current: @submission.Grade.Value.ToString("F1")
+                                                        </span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="no-submissions">
+                                    <p>No submissions yet for this exercise.</p>
+                                </div>
+                            }
+
+                            <div class="submissions-stats">
+                                <h4>Submission Statistics</h4>
+                                <div class="stats-grid">
+                                    <div class="stat-item">
+                                        <span>Total Students:</span>
+                                        <strong>@enrolledStudentsCount</strong>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span>Submissions:</span>
+                                        <strong>@submissions.Count</strong>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span>Submission Rate:</span>
+                                        <strong>@GetSubmissionRate()%</strong>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span>Average Grade:</span>
+                                        <strong>@(averageSubmissionGrade > 0 ? averageSubmissionGrade.ToString("F1") : "-")</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="welcome-section">
+                            <h3>Exercise Management</h3>
+                            <p>Select a course to view and manage exercises, or create a new exercise for your students.</p>
+
+                            <div class="quick-stats">
+                                <h4>Quick Stats</h4>
+                                <div class="stats-grid">
+                                    <div class="stat-card">
+                                        <div class="stat-number">@totalExercises</div>
+                                        <div class="stat-label">Total Exercises</div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-number">@totalSubmissions</div>
+                                        <div class="stat-label">Total Submissions</div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-number">@courses.Count</div>
+                                        <div class="stat-label">Your Courses</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="features-list">
+                                <h4>Features</h4>
+                                <ul>
+                                    <li>Create and publish exercises for your courses</li>
+                                    <li>Set due dates and maximum points</li>
+                                    <li>View student submissions with file attachments</li>
+                                    <li>Grade submissions and provide feedback</li>
+                                    <li>Track submission statistics and rates</li>
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<!-- Add/Edit Exercise Modal -->
+@if (showExerciseModal)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>@(editingExercise?.Id == 0 ? "Add New Exercise" : "Edit Exercise")</h3>
+                <button class="close-btn" @onclick="CloseExerciseModal">×</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-field">
+                    <label>Title *</label>
+                    <input type="text" @bind="editingExercise.Title" class="form-input" />
+                </div>
+
+                <div class="form-field">
+                    <label>Description *</label>
+                    <textarea @bind="editingExercise.Description" class="form-textarea" rows="4"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-field">
+                        <label>Due Date *</label>
+                        <div class="date-time-group">
+                            <input type="date" value="@dueDatePart" @onchange="@(e => dueDatePart = e.Value?.ToString())" class="form-input" />
+                            <input type="time" value="@dueTimePart" @onchange="@(e => dueTimePart = e.Value?.ToString())" class="form-input" />
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label>Max Points *</label>
+                        <input type="number" @bind="@editingExercise.MaxPoints" class="form-input" min="1" max="100" />
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <label>Instructions (Optional)</label>
+                    <textarea @bind="editingExercise.Instructions" class="form-textarea" rows="3"
+                              placeholder="Additional instructions for students..."></textarea>
+                </div>
+
+                <div class="form-field">
+                    <label class="checkbox-label">
+                        <input type="checkbox" @bind="editingExercise.IsPublished" />
+                        Publish immediately
+                    </label>
+                </div>
+
+                @if (!string.IsNullOrEmpty(editingExercise.AttachmentPath))
+                {
+                    <div class="current-attachment">
+                        <strong>Current Attachment:</strong>
+                        <a href="/files/@editingExercise.AttachmentPath" target="_blank">View File</a>
+                        <button type="button" class="remove-btn" @onclick="RemoveAttachment">Remove</button>
+                    </div>
+                }
+
+                <div class="form-field">
+                    <label>Upload File (Optional)</label>
+                    <input type="file" @ref="fileInputRef" class="file-input" />
+                    <small>Supported formats: PDF, DOC, DOCX, ZIP (Max 10MB)</small>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="save-btn" @onclick="SaveExercise" disabled="@(!IsExerciseFormValid())">
+                    @(editingExercise?.Id == 0 ? "Create Exercise" : "Update Exercise")
+                </button>
+                <button class="cancel-btn" @onclick="CloseExerciseModal">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isAuthorized = false;
+    private bool isAuthChecked = false;
+    private bool isLoading = false;
+    private bool showExerciseModal = false;
+    private bool showSubmissions = false;
+
+    private List<Course> courses = new();
+    private List<Exercise> exercises = new();
+    private List<ExerciseSubmission> submissions = new();
+    private List<User> enrolledStudents = new();
+    private Dictionary<int, int> submissionCounts = new();
+
+    private int selectedCourseId = 0;
+    private Course? selectedCourse;
+    private Exercise? selectedExercise;
+    private Exercise editingExercise = new();
+    private ElementReference fileInputRef;
+    private string dueDatePart = "";
+    private string dueTimePart = "23:59";
+
+    private int totalExercises = 0;
+    private int totalSubmissions = 0;
+    private int enrolledStudentsCount = 0;
+    private double averageSubmissionGrade = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await AuthStateService.InitializeAsync();
+            var user = AuthStateService.CurrentUser;
+
+            isAuthorized = user != null && (user.Role == "Teacher" || user.Role == "Admin");
+            isAuthChecked = true;
+
+            if (isAuthorized)
+            {
+                await LoadProfessorCourses();
+                await LoadStatistics();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing: {ex.Message}");
+            isAuthChecked = true;
+        }
+    }
+
+    private async Task LoadProfessorCourses()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var professorId = await GetCurrentProfessorId();
+            var allCourses = await GradesService.GetCoursesAsync();
+            courses = allCourses.Where(c => c.ProfessorId == professorId).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading courses: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadStatistics()
+    {
+        try
+        {
+            var professorId = await GetCurrentProfessorId();
+            totalExercises = await ExercisesService.GetTotalExercisesCountAsync(professorId);
+            totalSubmissions = await ExercisesService.GetTotalSubmissionsCountAsync(professorId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading statistics: {ex.Message}");
+        }
+    }
+
+    private async Task OnCourseSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int courseId))
+        {
+            selectedCourseId = courseId;
+            if (courseId > 0)
+            {
+                await LoadExercises(courseId);
+                await LoadEnrolledStudents(courseId);
+            }
+            else
+            {
+                selectedCourse = null;
+                exercises.Clear();
+                enrolledStudents.Clear();
+                submissionCounts.Clear();
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task LoadExercises(int courseId)
+    {
+        try
+        {
+            selectedCourse = courses.FirstOrDefault(c => c.Id == courseId);
+            if (selectedCourse == null) return;
+
+            exercises = await ExercisesService.GetExercisesByCourseAsync(courseId);
+
+            // Pre-load submission counts for all exercises
+            submissionCounts.Clear();
+            foreach (var exercise in exercises)
+            {
+                var count = await ExercisesService.GetSubmissionCountAsync(exercise.Id);
+                submissionCounts[exercise.Id] = count;
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading exercises: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading exercises: {ex.Message}");
+        }
+    }
+
+    private async Task LoadEnrolledStudents(int courseId)
+    {
+        try
+        {
+            // Using the existing GradesService method to get enrolled students
+            var allStudents = await GradesService.GetStudentsAsync();
+            var enrollments = await GetEnrollmentsForCourse(courseId);
+            var enrolledStudentIds = enrollments.Select(e => e.StudentId).ToList();
+
+            enrolledStudents = allStudents.Where(s => enrolledStudentIds.Contains(s.Id)).ToList();
+            enrolledStudentsCount = enrolledStudents.Count;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading students: {ex.Message}");
+        }
+    }
+
+    private async Task<List<Enrollment>> GetEnrollmentsForCourse(int courseId)
+    {
+        // You'll need to implement this method in your GradesService
+        // For now, return empty list - implement based on your enrollment structure
+        return new List<Enrollment>();
+    }
+
+    private async Task LoadSubmissions(int exerciseId)
+    {
+        try
+        {
+            submissions = await ExercisesService.GetSubmissionsByExerciseAsync(exerciseId);
+            averageSubmissionGrade = await ExercisesService.GetAverageGradeAsync(exerciseId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading submissions: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading submissions: {ex.Message}");
+        }
+    }
+
+    private void ShowAddExerciseModal()
+    {
+        if (selectedCourseId == 0)
+        {
+            JSRuntime.InvokeVoidAsync("alert", "Please select a course first.");
+            return;
+        }
+
+        editingExercise = new Exercise
+        {
+            Id = 0,
+            CourseId = selectedCourseId,
+            DueDate = DateTime.Now.AddDays(7),
+            MaxPoints = 10,
+            IsPublished = true
+        };
+
+        dueDatePart = editingExercise.DueDate.ToString("yyyy-MM-dd");
+        dueTimePart = editingExercise.DueDate.ToString("HH:mm");
+        showExerciseModal = true;
+        StateHasChanged();
+    }
+
+    private void EditExercise(Exercise exercise)
+    {
+        editingExercise = new Exercise
+        {
+            Id = exercise.Id,
+            CourseId = exercise.CourseId,
+            Title = exercise.Title,
+            Description = exercise.Description,
+            Instructions = exercise.Instructions,
+            DueDate = exercise.DueDate,
+            MaxPoints = exercise.MaxPoints,
+            IsPublished = exercise.IsPublished,
+            AttachmentPath = exercise.AttachmentPath
+        };
+
+        dueDatePart = editingExercise.DueDate.ToString("yyyy-MM-dd");
+        dueTimePart = editingExercise.DueDate.ToString("HH:mm");
+        showExerciseModal = true;
+        StateHasChanged();
+    }
+
+    private async Task SaveExercise()
+    {
+        if (!IsExerciseFormValid()) return;
+
+        try
+        {
+            // Combine date and time
+            if (DateTime.TryParse($"{dueDatePart} {dueTimePart}", out DateTime dueDate))
+            {
+                editingExercise.DueDate = dueDate;
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Please enter a valid due date and time.");
+                return;
+            }
+
+            if (editingExercise.Id == 0)
+            {
+                await ExercisesService.AddExerciseAsync(editingExercise);
+            }
+            else
+            {
+                await ExercisesService.UpdateExerciseAsync(editingExercise);
+            }
+
+            CloseExerciseModal();
+            await LoadExercises(selectedCourseId);
+            await LoadStatistics(); // Refresh statistics
+            await JSRuntime.InvokeVoidAsync("alert", $"Exercise {(editingExercise.Id == 0 ? "created" : "updated")} successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error saving exercise: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteExercise(int exerciseId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            "Are you sure you want to delete this exercise? This will also delete all submissions.");
+
+        if (!confirmed) return;
+
+        try
+        {
+            await ExercisesService.DeleteExerciseAsync(exerciseId);
+            await LoadExercises(selectedCourseId);
+            await LoadStatistics(); // Refresh statistics
+            await JSRuntime.InvokeVoidAsync("alert", "Exercise deleted successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error deleting exercise: {ex.Message}");
+        }
+    }
+
+    private async Task ViewSubmissions(Exercise exercise)
+    {
+        selectedExercise = exercise;
+        showSubmissions = true;
+        await LoadSubmissions(exercise.Id);
+        StateHasChanged();
+    }
+
+    private void CloseSubmissions()
+    {
+        showSubmissions = false;
+        selectedExercise = null;
+        submissions.Clear();
+        averageSubmissionGrade = 0;
+        StateHasChanged();
+    }
+
+    private async Task SaveSubmissionGrade(ExerciseSubmission submission)
+    {
+        if (!IsValidGrade(submission.Grade, selectedExercise?.MaxPoints ?? 10)) return;
+
+        try
+        {
+            await ExercisesService.UpdateSubmissionGradeAsync(submission.Id, submission.Grade.Value);
+            // Refresh the average grade after saving
+            averageSubmissionGrade = await ExercisesService.GetAverageGradeAsync(selectedExercise.Id);
+            StateHasChanged();
+            await JSRuntime.InvokeVoidAsync("alert", "Grade saved successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error saving grade: {ex.Message}");
+        }
+    }
+
+    private void CloseExerciseModal()
+    {
+        showExerciseModal = false;
+        editingExercise = new Exercise();
+        dueDatePart = "";
+        dueTimePart = "23:59";
+        StateHasChanged();
+    }
+
+    private void RemoveAttachment()
+    {
+        editingExercise.AttachmentPath = null;
+        StateHasChanged();
+    }
+
+    private string GetSubmissionRate()
+    {
+        if (enrolledStudentsCount == 0) return "0";
+        var rate = (submissions.Count * 100.0) / enrolledStudentsCount;
+        return rate.ToString("F1");
+    }
+
+    private bool IsExerciseFormValid()
+    {
+        // Check if due date is valid
+        if (!DateTime.TryParse($"{dueDatePart} {dueTimePart}", out DateTime dueDate) || dueDate <= DateTime.Now)
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(editingExercise.Title) &&
+               !string.IsNullOrWhiteSpace(editingExercise.Description) &&
+               editingExercise.MaxPoints > 0;
+    }
+
+    private bool IsValidGrade(double? grade, double maxPoints)
+    {
+        return grade.HasValue && grade >= 0 && grade <= maxPoints;
+    }
+
+    private async Task<int> GetCurrentProfessorId()
+    {
+        var user = AuthStateService.CurrentUser;
+        return user?.Id ?? 0;
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/profhome");
+    private void RedirectToHome() => Navigation.NavigateTo("/");
+}
+<style>
+    .professor-exercises {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 30px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    .date-time-group {
+        display: flex;
+        gap: 10px;
+    }
+
+        .date-time-group .form-input {
+            flex: 1;
+        }
+    .header-bar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 30px;
+        background: white;
+        padding: 20px 30px;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+    }
+
+    .header-bar h2 {
+        color: #2d3748;
+        font-size: 1.8rem;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .info-badge {
+        margin-left: auto;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .back-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .back-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .exercises-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        height: calc(100vh - 200px);
+    }
+
+    .exercises-list-container,
+    .details-container {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+        overflow-y: auto;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .section-header h3 {
+        color: #2d3748;
+        margin: 0;
+    }
+
+    .add-btn {
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+
+    .course-selection {
+        margin-bottom: 20px;
+    }
+
+    .course-selection label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #2d3748;
+    }
+
+    .course-selection select {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.95rem;
+    }
+
+    .exercises-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .exercise-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 20px;
+        background: #f8fafc;
+    }
+
+    .exercise-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+    }
+
+    .exercise-header h4 {
+        margin: 0;
+        color: #2d3748;
+        flex: 1;
+    }
+
+    .exercise-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .edit-btn {
+        background: #4299e1;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+
+    .delete-btn {
+        background: #f56565;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+
+    .exercise-description {
+        color: #4a5568;
+        margin-bottom: 15px;
+        line-height: 1.5;
+    }
+
+    .exercise-details {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+    }
+
+    .due-date {
+        color: #e53e3e;
+        font-weight: 500;
+    }
+
+    .submissions {
+        color: #4299e1;
+    }
+
+    .exercise-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .points {
+        background: #ed8936;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .status {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .status.published {
+        background: #48bb78;
+        color: white;
+    }
+
+    .status.draft {
+        background: #a0aec0;
+        color: white;
+    }
+
+    .view-submissions-btn {
+        width: 100%;
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+
+    .no-exercises {
+        text-align: center;
+        padding: 40px;
+        color: #718096;
+    }
+
+    .submissions-section {
+        height: 100%;
+    }
+
+    .submissions-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        margin-bottom: 20px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .submission-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 15px;
+        background: #f8fafc;
+    }
+
+    .submission-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .submission-header h5 {
+        margin: 0;
+        color: #2d3748;
+    }
+
+    .submission-date {
+        color: #718096;
+        font-size: 0.85rem;
+    }
+
+    .submission-content {
+        margin-bottom: 15px;
+    }
+
+    .submission-content p {
+        margin: 0 0 10px 0;
+        line-height: 1.5;
+    }
+
+    .file-link {
+        color: #4299e1;
+        text-decoration: none;
+    }
+
+    .file-link:hover {
+        text-decoration: underline;
+    }
+
+    .submission-grading {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 15px;
+    }
+
+    .grade-input-group {
+        margin-bottom: 10px;
+    }
+
+    .grade-input-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #2d3748;
+    }
+
+    .grade-input {
+        width: 100px;
+        padding: 6px 8px;
+        border: 2px solid #e2e8f0;
+        border-radius: 6px;
+    }
+
+    .grading-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .save-grade-btn {
+        background: #48bb78;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+
+    .save-grade-btn:disabled {
+        background: #cbd5e0;
+        cursor: not-allowed;
+    }
+
+    .current-grade {
+        color: #718096;
+        font-size: 0.85rem;
+    }
+
+    .no-submissions {
+        text-align: center;
+        padding: 40px;
+        color: #718096;
+    }
+
+    .submissions-stats {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .submissions-stats h4 {
+        margin: 0 0 15px 0;
+        color: #2d3748;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+
+    .stat-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .welcome-section {
+        text-align: center;
+        padding: 20px;
+    }
+
+    .quick-stats {
+        margin: 30px 0;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        margin: 20px 0;
+    }
+
+    .stat-card {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #667eea;
+        margin-bottom: 5px;
+    }
+
+    .stat-label {
+        color: #718096;
+        font-size: 0.9rem;
+    }
+
+    .features-list ul {
+        text-align: left;
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    .features-list li {
+        margin-bottom: 8px;
+        color: #4a5568;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 15px;
+        padding: 0;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 25px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .modal-header h3 {
+        margin: 0;
+        color: #2d3748;
+    }
+
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #718096;
+    }
+
+    .modal-body {
+        padding: 25px;
+    }
+
+    .form-field {
+        margin-bottom: 20px;
+    }
+
+    .form-field label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #2d3748;
+    }
+
+    .form-input, .form-textarea {
+        width: 100%;
+        padding: 10px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.95rem;
+    }
+
+    .form-textarea {
+        resize: vertical;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: normal;
+        cursor: pointer;
+    }
+
+    .current-attachment {
+        background: #f8fafc;
+        padding: 10px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+    }
+
+    .remove-btn {
+        background: #f56565;
+        color: white;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        margin-left: 10px;
+    }
+
+    .file-input {
+        width: 100%;
+        padding: 8px;
+        border: 2px dashed #e2e8f0;
+        border-radius: 6px;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        padding: 20px 25px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .save-btn {
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    .save-btn:disabled {
+        background: #cbd5e0;
+        cursor: not-allowed;
+    }
+
+    .cancel-btn {
+        background: #e2e8f0;
+        color: #4a5568;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    @@media (max-width: 1024px) {
+        .exercises-container {
+            grid-template-columns: 1fr;
+        }
+        
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+        
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
