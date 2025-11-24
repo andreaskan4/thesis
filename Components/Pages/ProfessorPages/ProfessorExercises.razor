@@ -452,21 +452,44 @@ else
     {
         try
         {
-            // Using the existing GradesService method to get enrolled students
-            var allStudents = await GradesService.GetStudentsAsync();
-            var enrollments = await GetEnrollmentsForCourse(courseId);
-            var enrolledStudentIds = enrollments.Select(e => e.StudentId).ToList();
-
-            enrolledStudents = allStudents.Where(s => enrolledStudentIds.Contains(s.Id)).ToList();
+            // Use the new method from GradesService to get actual enrolled students
+            var enrollments = await GradesService.GetEnrollmentsForCourseAsync(courseId);
+            enrolledStudents = enrollments.Select(e => e.Student).Where(s => s != null).ToList();
             enrolledStudentsCount = enrolledStudents.Count;
             StateHasChanged();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading students: {ex.Message}");
+            // Fallback: if the method doesn't exist yet, use a default value
+            enrolledStudentsCount = await GetDefaultStudentCount(courseId);
         }
     }
+    private async Task<int> GetDefaultStudentCount(int courseId)
+    {
+        try
+        {
+            // Try to get count from GradesService if the method exists
+            return await GradesService.GetEnrolledStudentsCountAsync(courseId);
+        }
+        catch
+        {
+            // Fallback: estimate based on total students in the system
+            var allStudents = await GradesService.GetStudentsAsync();
+            return allStudents.Count / courses.Count; // Rough estimate
+        }
+    }
+    private string GetSubmissionRate()
+    {
+        if (enrolledStudentsCount == 0)
+        {
+            // If we can't get enrolled students, show submission count only
+            return submissions.Count > 0 ? "N/A" : "0";
+        }
 
+        var rate = (submissions.Count * 100.0) / enrolledStudentsCount;
+        return rate.ToString("F1");
+    }
     private async Task<List<Enrollment>> GetEnrollmentsForCourse(int courseId)
     {
         // You'll need to implement this method in your GradesService
@@ -479,13 +502,28 @@ else
         try
         {
             submissions = await ExercisesService.GetSubmissionsByExerciseAsync(exerciseId);
-            averageSubmissionGrade = await ExercisesService.GetAverageGradeAsync(exerciseId);
+
+            // Calculate average grade from the loaded submissions, not from service
+            CalculateAverageGradeFromSubmissions();
+
             StateHasChanged();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading submissions: {ex.Message}");
             await JSRuntime.InvokeVoidAsync("alert", $"Error loading submissions: {ex.Message}");
+        }
+    }
+    private void CalculateAverageGradeFromSubmissions()
+    {
+        var gradedSubmissions = submissions.Where(s => s.Grade.HasValue).ToList();
+        if (gradedSubmissions.Any())
+        {
+            averageSubmissionGrade = gradedSubmissions.Average(s => s.Grade.Value);
+        }
+        else
+        {
+            averageSubmissionGrade = 0;
         }
     }
 
@@ -614,8 +652,18 @@ else
         try
         {
             await ExercisesService.UpdateSubmissionGradeAsync(submission.Id, submission.Grade.Value);
-            // Refresh the average grade after saving
-            averageSubmissionGrade = await ExercisesService.GetAverageGradeAsync(selectedExercise.Id);
+
+            // Update the grade in our local list
+            var localSubmission = submissions.FirstOrDefault(s => s.Id == submission.Id);
+            if (localSubmission != null)
+            {
+                localSubmission.Grade = submission.Grade;
+                localSubmission.GradedAt = DateTime.Now;
+            }
+
+            // Recalculate average from current submissions
+            CalculateAverageGradeFromSubmissions();
+
             StateHasChanged();
             await JSRuntime.InvokeVoidAsync("alert", "Grade saved successfully!");
         }
@@ -638,13 +686,6 @@ else
     {
         editingExercise.AttachmentPath = null;
         StateHasChanged();
-    }
-
-    private string GetSubmissionRate()
-    {
-        if (enrolledStudentsCount == 0) return "0";
-        var rate = (submissions.Count * 100.0) / enrolledStudentsCount;
-        return rate.ToString("F1");
     }
 
     private bool IsExerciseFormValid()

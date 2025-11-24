@@ -140,15 +140,6 @@ else
                                     </div>
                                 </div>
                             </div>
-
-                            <div class="course-actions">
-                                <button class="btn btn-outline btn-sm" @onclick="() => ViewEnrollments(course.Id)">
-                                    👥 View Enrollments
-                                </button>
-                                <button class="btn btn-outline btn-sm" @onclick="() => CreateAnnouncement(course.Id)">
-                                    📢 New Announcement
-                                </button>
-                            </div>
                         </div>
                     }
 
@@ -187,22 +178,6 @@ else
                                 <span class="stat-value">@averageGrade.ToString("F1")/10.0</span>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Quick Actions -->
-                <div class="actions-card">
-                    <h4>⚡ Quick Actions</h4>
-                    <div class="actions-list">
-                        <button class="action-btn" @onclick="GoToAnnouncements">
-                            📢 Manage Announcements
-                        </button>
-                        <button class="action-btn" @onclick="GoToGrades">
-                            📊 Manage Grades
-                        </button>
-                        <button class="action-btn" @onclick="GoToSchedule">
-                            🕒 View Schedule
-                        </button>
                     </div>
                 </div>
             </div>
@@ -375,20 +350,6 @@ else
         return courseAnnouncements.Count(a => a.CourseId == courseId);
     }
 
-    private async Task ViewEnrollments(int courseId)
-    {
-        Navigation.NavigateTo($"/courseenrollments/{courseId}");
-    }
-
-    private async Task CreateAnnouncement(int courseId)
-    {
-        Navigation.NavigateTo($"/createannouncement/{courseId}");
-    }
-
-    private void GoToAnnouncements() => Navigation.NavigateTo("/announcements");
-    private void GoToGrades() => Navigation.NavigateTo("/grades");
-    private void GoToSchedule() => Navigation.NavigateTo("/schedule");
-
     private void OnSearch(ChangeEventArgs e)
     {
         searchTerm = e.Value?.ToString() ?? "";
@@ -407,7 +368,6 @@ else
     private void GoBack() => Navigation.NavigateTo("/profhome");
     private void RedirectToHome() => Navigation.NavigateTo("/");
 }
-
 <style>
     * {
         margin: 0;

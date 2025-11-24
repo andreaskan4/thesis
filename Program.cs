@@ -15,6 +15,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<AuthStateService>();
 builder.Services.AddScoped<GradesService>();
 builder.Services.AddScoped<ExercisesService>();
+builder.Services.AddScoped<TeacherSettingsService>();
 
 
 var app = builder.Build();

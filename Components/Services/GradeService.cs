@@ -175,4 +175,10 @@ public class GradesService
             await _context.SaveChangesAsync();
         }
     }
+    public async Task<int> GetEnrolledStudentsCountAsync(int courseId)
+    {
+        return await _context.Enrollments
+            .Where(e => e.CourseId == courseId)
+            .CountAsync();
+    }
 }

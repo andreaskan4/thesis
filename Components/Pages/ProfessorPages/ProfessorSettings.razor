@@ -1,0 +1,1017 @@
+﻿@page "/profsettings"
+@inject AuthStateService AuthStateService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject TeacherSettingsService TeacherSettingsService
+
+<PageTitle>Thesis - Teacher Settings</PageTitle>
+
+@if (!isAuthChecked)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading Settings...</p>
+    </div>
+}
+else if (!isAuthorized)
+{
+    <div class="unauthorized-container">
+        <div class="unauthorized-card">
+            <div class="unauthorized-icon">🚫</div>
+            <h3>Access Denied</h3>
+            <p>You don't have permission to manage teacher settings.</p>
+            <button class="btn btn-primary" @onclick="RedirectToHome">Return to Home</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="teacher-settings">
+        <div class="header-bar">
+            <button class="back-btn" @onclick="GoBack">← Back to Dashboard</button>
+            <h2>Teacher Settings</h2>
+            <div class="info-badge">Teacher View</div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading">Loading teacher settings...</div>
+        }
+        else if (teacherSettings == null)
+        {
+            <div class="error-message">
+                <h3>Error Loading Settings</h3>
+                <p>Unable to load teacher settings. Please try again.</p>
+                <button class="retry-btn" @onclick="LoadSettings">Retry</button>
+            </div>
+        }
+        else
+        {
+            <div class="settings-container">
+                <!-- Left Navigation -->
+                <div class="settings-nav">
+                    <div class="nav-section">
+                        <h4>Teaching Settings</h4>
+                        <button class="nav-btn @(activeSection == "grading" ? "active" : "")" @onclick='() => SetActiveSection("grading")'>
+                            📊 Grading
+                        </button>
+                        <button class="nav-btn @(activeSection == "courses" ? "active" : "")" @onclick='() => SetActiveSection("courses")'>
+                            📚 Courses
+                        </button>
+                        <button class="nav-btn @(activeSection == "exercises" ? "active" : "")" @onclick='() => SetActiveSection("exercises")'>
+                            📝 Exercises
+                        </button>
+                        <button class="nav-btn @(activeSection == "notifications" ? "active" : "")" @onclick='() => SetActiveSection("notifications")'>
+                            🔔 Notifications
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Content -->
+                <div class="settings-content">
+                    <!-- Grading Settings -->
+                    @if (activeSection == "grading")
+                    {
+                        <div class="settings-section">
+                            <h3>Grading Settings</h3>
+                            <div class="settings-grid">
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Default Grading Scale</span>
+                                        <select @bind="teacherSettings.DefaultGradingScale" class="setting-select">
+                                            <option value="0-100">0-100 Points</option>
+                                            <option value="0-10">0-10 Points</option>
+                                            <option value="A-F">A-F Letter Grades</option>
+                                            <option value="Pass/Fail">Pass/Fail</option>
+                                        </select>
+                                    </label>
+                                    <small class="setting-description">Your preferred grading scale</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.AutoPublishGrades" />
+                                        <span>Auto-Publish Grades</span>
+                                    </label>
+                                    <small class="setting-description">Automatically publish grades after entering them</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.GradeNotifications" />
+                                        <span>Grade Change Notifications</span>
+                                    </label>
+                                    <small class="setting-description">Receive notifications when students view their grades</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Grade Rounding</span>
+                                        <select @bind="teacherSettings.GradeRounding" class="setting-select">
+                                            <option value="none">No Rounding</option>
+                                            <option value="nearest">Nearest Whole Number</option>
+                                            <option value="up">Always Round Up</option>
+                                            <option value="down">Always Round Down</option>
+                                        </select>
+                                    </label>
+                                    <small class="setting-description">How to round final grades</small>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Courses Settings -->
+                    @if (activeSection == "courses")
+                    {
+                        <div class="settings-section">
+                            <h3>Course Management</h3>
+                            <div class="settings-grid">
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.AutoArchiveCourses" />
+                                        <span>Auto-Archive Courses</span>
+                                    </label>
+                                    <small class="setting-description">Automatically archive courses after semester ends</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.AllowStudentWithdrawals" />
+                                        <span>Allow Student Withdrawals</span>
+                                    </label>
+                                    <small class="setting-description">Allow students to withdraw from your courses</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Default Course Template</span>
+                                        <select @bind="teacherSettings.DefaultCourseTemplate" class="setting-select">
+                                            <option value="standard">Standard Template</option>
+                                            <option value="lecture">Lecture-Based</option>
+                                            <option value="lab">Lab Course</option>
+                                            <option value="seminar">Seminar</option>
+                                        </select>
+                                    </label>
+                                    <small class="setting-description">Default template for new courses</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Max Students Per Course</span>
+                                        <input type="number" @bind="teacherSettings.MaxStudentsPerCourse" class="setting-input" min="1" max="500" />
+                                    </label>
+                                    <small class="setting-description">Maximum students allowed in your courses</small>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Exercises Settings -->
+                    @if (activeSection == "exercises")
+                    {
+                        <div class="settings-section">
+                            <h3>Exercise Settings</h3>
+                            <div class="settings-grid">
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Default Exercise Points</span>
+                                        <input type="number" @bind="teacherSettings.DefaultExercisePoints" class="setting-input" min="1" max="1000" />
+                                    </label>
+                                    <small class="setting-description">Default maximum points for new exercises</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Default Due Time</span>
+                                        <input type="time"
+                                               value="@defaultDueTimeString"
+                                               @onchange="@(e => defaultDueTimeString = e.Value?.ToString() ?? "23:59")"
+                                               class="setting-input" />
+                                    </label>
+                                    <small class="setting-description">Default due time for new exercises</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.AllowLateSubmissions" />
+                                        <span>Allow Late Submissions</span>
+                                    </label>
+                                    <small class="setting-description">Allow students to submit exercises after due date</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Late Submission Penalty (%)</span>
+                                        <input type="number" @bind="teacherSettings.LateSubmissionPenalty" class="setting-input" min="0" max="100" />
+                                    </label>
+                                    <small class="setting-description">Percentage penalty for late submissions</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.RequireFileUpload" />
+                                        <span>Require File Upload</span>
+                                    </label>
+                                    <small class="setting-description">Require file upload for exercise submissions</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Max File Size (MB)</span>
+                                        <input type="number" @bind="teacherSettings.MaxFileSizeMB" class="setting-input" min="1" max="100" />
+                                    </label>
+                                    <small class="setting-description">Maximum file size for exercise submissions</small>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Notifications Settings -->
+                    @if (activeSection == "notifications")
+                    {
+                        <div class="settings-section">
+                            <h3>Notification Settings</h3>
+                            <div class="settings-grid">
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.NotifyNewSubmissions" />
+                                        <span>New Submission Notifications</span>
+                                    </label>
+                                    <small class="setting-description">Get notified when students submit new work</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.NotifyLateSubmissions" />
+                                        <span>Late Submission Notifications</span>
+                                    </label>
+                                    <small class="setting-description">Get notified about late submissions</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.NotifyGradeViews" />
+                                        <span>Grade View Notifications</span>
+                                    </label>
+                                    <small class="setting-description">Get notified when students view their grades</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label checkbox-label">
+                                        <input type="checkbox" @bind="teacherSettings.EmailDigest" />
+                                        <span>Email Digest</span>
+                                    </label>
+                                    <small class="setting-description">Receive daily email summaries</small>
+                                </div>
+
+                                <div class="setting-item">
+                                    <label class="setting-label">
+                                        <span>Notification Frequency</span>
+                                        <select @bind="teacherSettings.NotificationFrequency" class="setting-select">
+                                            <option value="immediate">Immediate</option>
+                                            <option value="hourly">Hourly</option>
+                                            <option value="daily">Daily</option>
+                                        </select>
+                                    </label>
+                                    <small class="setting-description">How often to receive notifications</small>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Action Buttons -->
+                    <div class="settings-actions">
+                        <button class="save-btn" @onclick="SaveSettings" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <span>💾 Save Settings</span>
+                            }
+                        </button>
+                        <button class="reset-btn" @onclick="ResetToDefaults">
+                            🔄 Reset to Defaults
+                        </button>
+                        <button class="cancel-btn" @onclick="GoBack">
+                            ❌ Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool isAuthorized = false;
+    private bool isAuthChecked = false;
+    private bool isLoading = false;
+    private bool isSaving = false;
+
+    private string activeSection = "grading";
+    private TeacherSettings teacherSettings = new();
+    private string defaultDueTimeString = "23:59";
+    private bool settingsLoaded = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await AuthStateService.InitializeAsync();
+            var user = AuthStateService.CurrentUser;
+
+            isAuthorized = user != null && (user.Role == "Teacher" || user.Role == "Admin");
+            isAuthChecked = true;
+
+            if (isAuthorized)
+            {
+                await LoadSettings();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing: {ex.Message}");
+            isAuthChecked = true;
+        }
+    }
+
+    private async Task LoadSettings()
+    {
+        if (settingsLoaded && teacherSettings != null) return;
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var teacherId = await GetCurrentTeacherId();
+            teacherSettings = await TeacherSettingsService.GetTeacherSettingsAsync(teacherId);
+
+            if (teacherSettings != null)
+            {
+                defaultDueTimeString = teacherSettings.DefaultDueTime ?? "23:59";
+                settingsLoaded = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading settings: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading settings: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SetActiveSection(string section)
+    {
+        activeSection = section;
+        StateHasChanged();
+    }
+
+    private async Task SaveSettings()
+    {
+        isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            teacherSettings.DefaultDueTime = defaultDueTimeString;
+
+            var teacherId = await GetCurrentTeacherId();
+            await TeacherSettingsService.UpdateTeacherSettingsAsync(teacherId, teacherSettings);
+            await JSRuntime.InvokeVoidAsync("alert", "Settings saved successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error saving settings: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ResetToDefaults()
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            "Are you sure you want to reset all settings to default values?");
+
+        if (!confirmed) return;
+
+        try
+        {
+            teacherSettings = new TeacherSettings();
+            defaultDueTimeString = "23:59";
+            StateHasChanged();
+            await JSRuntime.InvokeVoidAsync("alert", "Settings reset to defaults!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error resetting settings: {ex.Message}");
+        }
+    }
+
+    private async Task<int> GetCurrentTeacherId()
+    {
+        var user = AuthStateService.CurrentUser;
+        return user?.Id ?? 0;
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/profhome");
+    private void RedirectToHome() => Navigation.NavigateTo("/");
+}
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    /* Loading and Auth States */
+    .loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .spinner {
+        width: 60px;
+        height: 60px;
+        border: 5px solid rgba(255, 255, 255, 0.2);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s ease-in-out infinite;
+    }
+
+    @@keyframes spin {
+        to
+
+    {
+        transform: rotate(360deg);
+    }
+
+    }
+
+    .loading-container p {
+        margin-top: 25px;
+        color: white;
+        font-size: 1.2rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    .unauthorized-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+    }
+
+    .unauthorized-card {
+        background: white;
+        padding: 60px 50px;
+        border-radius: 24px;
+        text-align: center;
+        box-shadow: 0 25px 80px rgba(0, 0, 0, 0.25);
+        max-width: 450px;
+        animation: slideUp 0.4s ease-out;
+    }
+
+    @@keyframes slideUp {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    }
+
+    .unauthorized-icon {
+        font-size: 5rem;
+        margin-bottom: 25px;
+        animation: bounce 2s ease-in-out infinite;
+    }
+
+    @@keyframes bounce {
+        0%, 100%
+
+    {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+
+    }
+
+    .unauthorized-card h3 {
+        font-size: 2rem;
+        color: #2d3748;
+        margin-bottom: 15px;
+        font-weight: 700;
+    }
+
+    .unauthorized-card p {
+        color: #718096;
+        margin-bottom: 35px;
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+
+    /* Main Container */
+    .teacher-settings {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 30px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    /* Header Bar */
+    .header-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        padding: 25px 35px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+
+        .header-bar h2 {
+            color: #2d3748;
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+    .info-badge {
+        padding: 8px 16px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        color: #667eea;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        border: 2px solid rgba(102, 126, 234, 0.2);
+    }
+
+    .back-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+        .back-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+    /* Loading State */
+    .loading {
+        text-align: center;
+        padding: 60px 40px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        color: #667eea;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    /* Settings Container */
+    .settings-container {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 30px;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @@keyframes fadeIn {
+        from
+
+    {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+
+    }
+
+    /* Settings Navigation */
+    .settings-nav {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        height: fit-content;
+        position: sticky;
+        top: 30px;
+    }
+
+    .nav-section {
+        margin-bottom: 30px;
+    }
+
+        .nav-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .nav-section h4 {
+            font-size: 0.85rem;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+    .nav-btn {
+        width: 100%;
+        padding: 12px 16px;
+        background: transparent;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #4a5568;
+        text-align: left;
+        transition: all 0.3s ease;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+        .nav-btn:hover {
+            background: rgba(102, 126, 234, 0.08);
+            color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .nav-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+    /* Settings Content */
+    .settings-content {
+        background: white;
+        border-radius: 20px;
+        padding: 35px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        animation: slideInRight 0.5s ease-out;
+    }
+
+    @@keyframes slideInRight {
+        from
+
+    {
+        opacity: 0;
+        transform: translateX(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    }
+
+    .settings-section h3 {
+        font-size: 1.8rem;
+        color: #2d3748;
+        margin-bottom: 30px;
+        font-weight: 700;
+        padding-bottom: 20px;
+        border-bottom: 3px solid #e2e8f0;
+    }
+
+    /* Settings Grid */
+    .settings-grid {
+        display: grid;
+        gap: 30px;
+    }
+
+    .setting-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .setting-label {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        font-weight: 600;
+        color: #2d3748;
+        font-size: 1rem;
+    }
+
+        .setting-label > span:first-child {
+            font-weight: 700;
+        }
+
+    .checkbox-label {
+        flex-direction: row;
+        align-items: center;
+        cursor: pointer;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.03) 0%, rgba(118, 75, 162, 0.03) 100%);
+        border-radius: 12px;
+        transition: all 0.3s ease;
+    }
+
+        .checkbox-label:hover {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #667eea;
+            margin-right: 12px;
+        }
+
+    .setting-select,
+    .setting-input,
+    .setting-textarea {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+        background: white;
+        color: #2d3748;
+        font-family: inherit;
+    }
+
+        .setting-select:focus,
+        .setting-input:focus,
+        .setting-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+    .setting-textarea {
+        resize: vertical;
+        min-height: 100px;
+        line-height: 1.6;
+    }
+
+    .setting-input[type="number"] {
+        -moz-appearance: textfield;
+    }
+
+        .setting-input[type="number"]::-webkit-inner-spin-button,
+        .setting-input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+    .setting-description {
+        color: #718096;
+        font-size: 0.85rem;
+        font-weight: 400;
+        line-height: 1.5;
+        margin-top: 5px;
+    }
+
+    /* Settings Actions */
+    .settings-actions {
+        display: flex;
+        gap: 15px;
+        padding-top: 35px;
+        margin-top: 35px;
+        border-top: 3px solid #e2e8f0;
+        flex-wrap: wrap;
+    }
+
+    .save-btn,
+    .reset-btn,
+    .cancel-btn {
+        padding: 14px 28px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .save-btn {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+
+        .save-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+        }
+
+        .save-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+    .reset-btn {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+        color: #f59e0b;
+        border: 2px solid rgba(245, 158, 11, 0.3);
+    }
+
+        .reset-btn:hover {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            border-color: transparent;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.3);
+        }
+
+    .cancel-btn {
+        background: white;
+        color: #4a5568;
+        border: 2px solid #e2e8f0;
+    }
+
+        .cancel-btn:hover {
+            background: #f8f9fa;
+            border-color: #cbd5e1;
+            transform: translateY(-2px);
+        }
+
+    /* Button Primary (for unauthorized card) */
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+    }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #653a8e 100%);
+        }
+
+    /* Responsive Design */
+    @@media (max-width: 1024px) {
+        .settings-container
+
+    {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-nav {
+        position: static;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+    }
+
+    .nav-section {
+        margin-bottom: 0;
+    }
+
+    }
+
+    @@media (max-width: 768px) {
+        .teacher-settings
+
+    {
+        padding: 20px;
+    }
+
+    .header-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 20px;
+    }
+
+        .header-bar h2 {
+            font-size: 1.5rem;
+        }
+
+    .settings-nav {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-content {
+        padding: 25px;
+    }
+
+    .settings-section h3 {
+        font-size: 1.4rem;
+    }
+
+    .settings-actions {
+        flex-direction: column;
+    }
+
+    .save-btn,
+    .reset-btn,
+    .cancel-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .nav-btn {
+        font-size: 0.9rem;
+        padding: 10px 14px;
+    }
+
+    }
+
+    @@media (max-width: 480px) {
+        .setting-label
+
+    {
+        font-size: 0.9rem;
+    }
+
+    .setting-select,
+    .setting-input,
+    .setting-textarea {
+        font-size: 0.9rem;
+        padding: 10px 14px;
+    }
+
+    .checkbox-label {
+        padding: 10px 12px;
+    }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+    }
+</style>

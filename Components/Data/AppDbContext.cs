@@ -26,6 +26,7 @@ namespace Thesis.Data
         public DbSet<CourseRating> CourseRatings { get; set; }
         public DbSet<Exercise> Exercises { get; set; }
         public DbSet<ExerciseSubmission> ExerciseSubmissions { get; set; }
+        public DbSet<TeacherSettings> TeacherSettings { get; set; }
 
         // ✅ Rename to match the actual table name
         public DbSet<AdminSystemSettings> AdminSystemSettings { get; set; }
