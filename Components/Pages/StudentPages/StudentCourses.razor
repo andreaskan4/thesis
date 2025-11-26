@@ -520,7 +520,7 @@ else
             // Reload ratings data
             await LoadProfessorRatings(currentUser.Id);
 
-            await JSRuntime.InvokeVoidAsync("alert", $"Rating submitted successfully!");
+           
         }
         catch (DbUpdateException dbEx)
         {
@@ -586,7 +586,7 @@ else
 
             // Reload enrollments
             await LoadData();
-            await JSRuntime.InvokeVoidAsync("alert", "Successfully enrolled in the course!");
+            
         }
         catch (Exception ex)
         {
@@ -615,7 +615,7 @@ else
 
                     // Reload enrollments
                     await LoadData();
-                    await JSRuntime.InvokeVoidAsync("alert", "Successfully unenrolled from the course.");
+                    
                 }
             }
             catch (Exception ex)

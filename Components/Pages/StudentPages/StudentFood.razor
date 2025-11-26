@@ -1,0 +1,2209 @@
+﻿@page "/studentfood"
+@using Thesis.Components.Layout
+@layout MainLayout
+@inject AuthStateService AuthStateService
+@inject NavigationManager Navigation
+@inject Data.AppDbContext Context
+@inject IJSRuntime JSRuntime
+@using Thesis.Models
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Gnosis - Student Food</PageTitle>
+
+@if (!isAuthChecked)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading Food Service...</p>
+    </div>
+}
+else if (!isAuthorized)
+{
+    <div class="unauthorized-container">
+        <div class="unauthorized-card">
+            <div class="unauthorized-icon">🚫</div>
+            <h3>Access Denied</h3>
+            <p>You don't have permission to access the food service.</p>
+            <button class="btn btn-primary" @onclick="RedirectToHome">Return to Home</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="student-food">
+        <!-- Header -->
+        <div class="header-bar">
+            <button class="back-btn" @onclick="GoBack">← Back to Dashboard</button>
+            <h2>🍽️ Student Food Service</h2>
+            <div class="header-actions">
+                @if (isCafeteriaWorker)
+                {
+                    <button class="btn btn-primary" @onclick="ShowManageScheduleModal">
+                        📅 Manage Weekly Schedule
+                    </button>
+                }
+                <div class="food-stats">
+                    <span class="stat-item">Tomorrow: @tomorrowMenu?.Day.ToString("dddd")</span>
+                    <span class="stat-item">Available Meals: @(tomorrowMenu?.Meals?.Count ?? 0)</span>
+                    @if (isCafeteriaWorker)
+                    {
+                        <span class="stat-item worker-badge">👨‍🍳 Cafeteria Worker</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="food-container">
+            <!-- Tomorrow's Menu -->
+            <div class="tomorrow-menu-section">
+                <div class="section-header">
+                    <h3>🍽️ Tomorrow's Menu (@tomorrowMenu?.Day.ToString("MMMM dd, yyyy"))</h3>
+                </div>
+
+                @if (tomorrowMenu == null || !tomorrowMenu.Meals.Any())
+                {
+                    <div class="empty-menu">
+                        <div class="empty-icon">🍽️</div>
+                        <h4>No Menu Scheduled</h4>
+                        <p>@(isCafeteriaWorker ? "Add meals to tomorrow's schedule using the weekly schedule manager." : "Check back later for tomorrow's menu.")</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="meals-grid">
+                        @foreach (var meal in tomorrowMenu.Meals)
+                        {
+                            <div class="meal-card">
+                                <div class="meal-header">
+                                    <div class="meal-type-badge @meal.Type.ToLower()">@GetMealTypeIcon(meal.Type) @meal.Type</div>
+                                </div>
+                                <div class="meal-content">
+                                    <h4 class="meal-name">@meal.Name</h4>
+                                    <p class="meal-description">@meal.Description</p>
+                                    <div class="meal-details">
+                                        <span class="detail-item">
+                                            🕒 @meal.PreparationTime min
+                                        </span>
+                                        <span class="detail-item">
+                                            👥 Serves @meal.Servings
+                                        </span>
+                                        <span class="detail-item @(meal.IsVegetarian ? "vegetarian" : "")">
+                                            @(meal.IsVegetarian ? "🌱 Vegetarian" : "🍖 Non-Veg")
+                                        </span>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(meal.Allergens))
+                                    {
+                                        <div class="allergens">
+                                            <strong>Allergens:</strong> @meal.Allergens
+                                        </div>
+                                    }
+                                </div>
+                                <div class="meal-footer">
+                                    <div class="meal-chef">
+                                        <span class="chef-avatar">👨‍🍳</span>
+                                        <span class="chef-name">@meal.ChefName</span>
+                                    </div>
+                                    <div class="meal-price">
+                                        $@meal.Price.ToString("0.00")
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- All Available Meals Section -->
+            <div class="all-meals-section">
+                <div class="section-header">
+                    <h3>📋 All Available Meals</h3>
+                    <div class="section-actions">
+                        <button class="btn btn-outline btn-sm" @onclick="RefreshAllMeals">
+                            🔄 Refresh
+                        </button>
+                        @if (isCafeteriaWorker)
+                        {
+                            <button class="btn btn-primary btn-sm" @onclick="ShowAddMealModal">
+                                ➕ Add New Meal
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @if (allMeals == null || !allMeals.Any())
+                {
+                    <div class="empty-meals">
+                        <div class="empty-icon">🍽️</div>
+                        <h4>No Meals Available</h4>
+                        <p>@(isCafeteriaWorker ? "Start by adding some meals to the system." : "No meals are currently available.")</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="meals-table-container">
+                        <table class="meals-table">
+                            <thead>
+                                <tr>
+                                    <th>Meal Name</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Price</th>
+                                    <th>Status</th>
+                                    @if (isCafeteriaWorker)
+                                    {
+                                        <th>Actions</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var meal in allMeals)
+                                {
+                                    <tr class="meal-row @(meal.FoodScheduleId.HasValue ? "scheduled" : "available")">
+                                        <td class="meal-name-cell">
+                                            <div class="meal-name-with-icon">
+                                                <span class="meal-type-icon">@GetMealTypeIcon(meal.Type)</span>
+                                                <strong>@meal.Name</strong>
+                                            </div>
+                                            @if (meal.IsVegetarian)
+                                            {
+                                                <span class="vegetarian-indicator">🌱 Vegetarian</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <span class="meal-type-tag @meal.Type.ToLower()">@meal.Type</span>
+                                        </td>
+                                        <td class="meal-description-cell">
+                                            <span class="meal-description">@meal.Description</span>
+                                            @if (!string.IsNullOrEmpty(meal.Allergens))
+                                            {
+                                                <div class="allergens-small">
+                                                    <small><strong>Allergens:</strong> @meal.Allergens</small>
+                                                </div>
+                                            }
+                                        </td>
+                                        <td class="meal-price-cell">
+                                            $@meal.Price.ToString("0.00")
+                                        </td>
+                                        <td class="meal-status-cell">
+                                            @if (meal.FoodScheduleId.HasValue)
+                                            {
+                                                <span class="status-badge scheduled">📅 Scheduled</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="status-badge available">✅ Available</span>
+                                            }
+                                        </td>
+                                        @if (isCafeteriaWorker)
+                                        {
+                                            <td class="meal-actions-cell">
+                                                <div class="action-buttons">
+                                                    <button class="btn-icon" @onclick="() => EditMeal(meal)" title="Edit meal">
+                                                        ✏️
+                                                    </button>
+                                                    <button class="btn-icon btn-danger" @onclick="() => DeleteMeal(meal)" title="Delete meal">
+                                                        🗑️
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            <!-- Weekly Schedule (Visible only to workers) -->
+            @if (isCafeteriaWorker)
+            {
+                <div class="weekly-schedule-section">
+                    <div class="section-header">
+                        <h3>📅 Weekly Schedule</h3>
+                        <div class="schedule-actions">
+                            <button class="btn btn-outline btn-sm" @onclick="RefreshSchedule">
+                                🔄 Refresh
+                            </button>
+                            <button class="btn btn-primary btn-sm" @onclick="ShowAddMealModal">
+                                ➕ Add New Meal
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (weeklySchedule == null || !weeklySchedule.Any())
+                    {
+                        <div class="empty-schedule">
+                            <div class="empty-icon">📅</div>
+                            <h4>No Weekly Schedule</h4>
+                            <p>Start by adding meals to the weekly schedule.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="schedule-days">
+                            @foreach (var daySchedule in weeklySchedule.OrderBy(ws => ws.Day))
+                            {
+                                <div class="day-schedule @(daySchedule.Day.Date == tomorrowMenu?.Day.Date ? "tomorrow" : "")">
+                                    <div class="day-header">
+                                        <h4>@daySchedule.Day.ToString("dddd")</h4>
+                                        <span class="day-date">@daySchedule.Day.ToString("MMM dd")</span>
+                                        <div class="day-actions">
+                                            @if (!IsPastDay(daySchedule.Day))
+                                            {
+                                                <button class="btn-icon" @onclick="() => ShowAddMealToDayModal(daySchedule)" title="Add meal to day">
+                                                    ➕
+                                                </button>
+                                                <button class="btn-icon" @onclick="() => ClearDaySchedule(daySchedule)" title="Clear day schedule">
+                                                    🗑️
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <span class="past-day-indicator">Past day</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="day-meals">
+                                        @if (daySchedule.Meals.Any())
+                                        {
+                                            @foreach (var meal in daySchedule.Meals)
+                                            {
+                                                <div class="schedule-meal">
+                                                    <div class="meal-info">
+                                                        <span class="meal-type @meal.Type.ToLower()">@GetMealTypeIcon(meal.Type)</span>
+                                                        <span class="meal-name">@meal.Name</span>
+                                                    </div>
+                                                    <div class="meal-actions">
+                                                        @if (!IsPastDay(daySchedule.Day))
+                                                        {
+                                                            <button class="btn-icon" @onclick="() => RemoveMealFromDay(daySchedule, meal)" title="Remove from day">
+                                                                ❌
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <div class="no-meals">No meals scheduled</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Manage Schedule Modal -->
+    @if (showManageScheduleModal)
+    {
+        <div class="modal-overlay">
+            <div class="modal-content large-modal">
+                <div class="modal-header">
+                    <h3>📅 Manage Weekly Schedule</h3>
+                    <button class="close-btn" @onclick="CloseManageScheduleModal">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="schedule-management">
+                        <div class="current-week-display">
+                            <h4>Current Week: @currentWeekStart.ToString("MMMM dd") - @currentWeekStart.AddDays(4).ToString("MMMM dd")</h4>
+                        </div>
+
+                        <div class="weekly-grid">
+                            @foreach (var day in weekDays)
+                            {
+                                var daySchedule = GetDaySchedule(day);
+                                <div class="weekly-day @(day.Date == DateTime.Today ? "today" : "") @(day.Date == DateTime.Today.AddDays(1) ? "tomorrow" : "")">
+                                    <div class="weekly-day-header">
+                                        <h4>@day.ToString("dddd")</h4>
+                                        <span class="weekly-date">@day.ToString("MMM dd")</span>
+                                    </div>
+                                    <div class="weekly-meals">
+                                        @if (daySchedule?.Meals?.Any() == true)
+                                        {
+                                            @foreach (var meal in daySchedule.Meals)
+                                            {
+                                                <div class="weekly-meal">
+                                                    <div class="weekly-meal-info">
+                                                        <span class="weekly-meal-name">@meal.Name</span>
+                                                        <div class="weekly-meal-details">
+                                                            <span class="weekly-meal-type">@meal.Type</span>
+                                                        </div>
+                                                    </div>
+                                                    @if (!IsPastDay(day))
+                                                    {
+                                                        <button class="btn-icon btn-remove"
+                                                                @onclick="() => RemoveMealFromSchedule(daySchedule, meal)"
+                                                                title="Remove from schedule">
+                                                            ❌
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <div class="no-weekly-meals">No meals scheduled</div>
+                                        }
+                                    </div>
+                                    <div class="weekly-day-actions">
+                                        @if (!IsPastDay(day))
+                                        {
+                                            <button class="btn btn-primary btn-sm" @onclick="() => ShowAddMealToDayModal(day)">
+                                                ➕ Add Meals
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <div class="past-day-message">
+                                                <small>Day has passed</small>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" @onclick="CloseManageScheduleModal">Close</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Add/Edit Meal Modal -->
+    @if (showMealModal)
+    {
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>@(editingMeal != null ? "✏️ Edit Meal" : "➕ Add New Meal")</h3>
+                    <button class="close-btn" @onclick="CloseMealModal">×</button>
+                </div>
+                <div class="modal-body">
+                    <form class="meal-form">
+                        <div class="form-group">
+                            <label>Meal Name *</label>
+                            <input type="text" @bind="currentMeal.Name" class="form-control"
+                                   placeholder="Enter meal name..." />
+                        </div>
+                        <div class="form-group">
+                            <label>Description *</label>
+                            <textarea @bind="currentMeal.Description" class="form-control" rows="3"
+                                      placeholder="Describe the meal..."></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Meal Type *</label>
+                                <select @bind="currentMeal.Type" class="form-control">
+                                    <option value="Breakfast">Breakfast</option>
+                                    <option value="Lunch">Lunch</option>
+                                    <option value="Dinner">Dinner</option>
+                                    <option value="Snack">Snack</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Price ($) *</label>
+                                <input type="number" @bind="currentMeal.Price" step="0.01"
+                                       class="form-control" min="0" />
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Preparation Time (min) *</label>
+                                <input type="number" @bind="currentMeal.PreparationTime"
+                                       class="form-control" min="1" />
+                            </div>
+                            <div class="form-group">
+                                <label>Servings *</label>
+                                <input type="number" @bind="currentMeal.Servings"
+                                       class="form-control" min="1" />
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Chef Name</label>
+                                <input type="text" @bind="currentMeal.ChefName"
+                                       class="form-control" placeholder="Optional" />
+                            </div>
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" @bind="currentMeal.IsVegetarian" />
+                                    🌱 Vegetarian
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Allergens</label>
+                            <input type="text" @bind="currentMeal.Allergens"
+                                   class="form-control" placeholder="e.g., nuts, dairy, gluten" />
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" @onclick="CloseMealModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SaveMeal"
+                            disabled="@(!CanSaveMeal())">
+                        @(editingMeal != null ? "Update Meal" : "Add Meal")
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Add Meal to Day Modal -->
+    @if (showAddMealToDayModal)
+    {
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>➕ Add Meals to @selectedDaySchedule?.Day.ToString("dddd, MMMM dd")</h3>
+                    <button class="close-btn" @onclick="CloseAddMealToDayModal">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="available-meals-list">
+                        <h4>Available Meals</h4>
+                        @if (availableMeals.Any())
+                        {
+                            <div class="meal-selection-list">
+                                @foreach (var meal in availableMeals)
+                                {
+                                    <div class="meal-selection-item @(selectedMealsForDay.Contains(meal.Id) ? "selected" : "")">
+                                        <div class="meal-selection-checkbox">
+                                            <input type="checkbox"
+                                                   checked="@selectedMealsForDay.Contains(meal.Id)"
+                                                   @onchange="@((e) => ToggleMealSelection(meal.Id, (bool)e.Value))" />
+                                        </div>
+                                        <div class="meal-selection-info">
+                                            <h5>@meal.Name</h5>
+                                            <p>@meal.Description</p>
+                                            <div class="meal-selection-details">
+                                                <span class="tag @meal.Type.ToLower()">@meal.Type</span>
+                                                <span class="price">$@meal.Price.ToString("0.00")</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="no-available-meals">
+                                <p>No meals available. Add some meals first.</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" @onclick="CloseAddMealToDayModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="AddSelectedMealsToDay"
+                            disabled="@(!selectedMealsForDay.Any())">
+                        Add Selected (@selectedMealsForDay.Count)
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+}
+@code {
+    private bool isAuthChecked = false;
+    private bool isAuthorized = false;
+    private bool isCafeteriaWorker = false;
+    private bool isLoading = true;
+    private bool showManageScheduleModal = false;
+    private bool showMealModal = false;
+    private bool showAddMealToDayModal = false;
+
+    // Data
+    private User? currentUser = null;
+    private FoodSchedule? tomorrowMenu = null;
+    private List<FoodSchedule> weeklySchedule = new();
+    private List<FoodMeal> availableMeals = new();
+    private List<FoodMeal> allMeals = new();
+    private HashSet<int> selectedMealsForDay = new();
+    private List<DateTime> weekDays = new();
+
+    // Modals
+    private FoodMeal currentMeal = new();
+    private FoodMeal? editingMeal = null;
+    private DateTime selectedDay = DateTime.Today;
+    private FoodSchedule? selectedDaySchedule = null;
+    private DateTime currentWeekStart = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthorization();
+        if (isAuthorized)
+        {
+            await LoadFoodData();
+            InitializeWeek();
+        }
+    }
+
+    private async Task CheckAuthorization()
+    {
+        try
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                if (AuthStateService.CurrentUser != null)
+                    break;
+                await Task.Delay(100);
+            }
+
+            currentUser = AuthStateService.CurrentUser;
+            isAuthorized = currentUser != null && currentUser.Role == "Student";
+
+            if (isAuthorized)
+            {
+                isCafeteriaWorker = await CheckIfCafeteriaWorker();
+            }
+
+            isAuthChecked = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Authorization error: {ex.Message}");
+            isAuthChecked = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<bool> CheckIfCafeteriaWorker()
+    {
+        if (currentUser == null) return false;
+
+        try
+        {
+            return await Context.CafeteriaWorkers
+                .AnyAsync(cw => cw.StudentId == currentUser.Id && cw.IsActive);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task LoadFoodData()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            // Load tomorrow's menu
+            var tomorrow = DateTime.Today.AddDays(1);
+            tomorrowMenu = await Context.FoodSchedules
+                .Include(fs => fs.Meals)
+                .FirstOrDefaultAsync(fs => fs.Day.Date == tomorrow.Date);
+
+            // Load all meals (for the new section)
+            await LoadAllMeals();
+
+            // Load weekly schedule for cafeteria workers
+            if (isCafeteriaWorker)
+            {
+                await LoadWeeklyScheduleData();
+
+                // Load available meals for scheduling
+                availableMeals = await Context.FoodMeals
+                    .Where(fm => fm.FoodScheduleId == null) // Only show unscheduled meals
+                    .OrderBy(fm => fm.Name)
+                    .ToListAsync();
+            }
+
+            isLoading = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading food data: {ex.Message}");
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAllMeals()
+    {
+        try
+        {
+            allMeals = await Context.FoodMeals
+                .Include(fm => fm.FoodSchedule)
+                .OrderBy(fm => fm.Name)
+                .ToListAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading all meals: {ex.Message}");
+        }
+    }
+
+    private async Task LoadWeeklyScheduleData()
+    {
+        try
+        {
+            var weekStart = currentWeekStart;
+            var weekEnd = weekStart.AddDays(4); // Only Monday to Friday
+
+            weeklySchedule = await Context.FoodSchedules
+                .Include(fs => fs.Meals)
+                .Where(fs => fs.Day >= weekStart && fs.Day <= weekEnd)
+                .ToListAsync();
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading weekly schedule: {ex.Message}");
+        }
+    }
+
+    private FoodSchedule? GetDaySchedule(DateTime day)
+    {
+        return weeklySchedule?.FirstOrDefault(ws => ws.Day.Date == day.Date);
+    }
+
+    private bool IsPastDay(DateTime day)
+    {
+        return day.Date < DateTime.Today;
+    }
+
+    private void InitializeWeek()
+    {
+        // Start from the most recent Monday
+        currentWeekStart = DateTime.Today;
+        while (currentWeekStart.DayOfWeek != DayOfWeek.Monday)
+        {
+            currentWeekStart = currentWeekStart.AddDays(-1);
+        }
+
+        // Only include Monday to Friday (5 days)
+        weekDays = Enumerable.Range(0, 5)
+            .Select(i => currentWeekStart.AddDays(i))
+            .ToList();
+    }
+
+    // Schedule management
+    private async void ShowManageScheduleModal()
+    {
+        showManageScheduleModal = true;
+        await LoadWeeklyScheduleData(); // Load data when modal opens
+        StateHasChanged();
+    }
+
+    private void CloseManageScheduleModal()
+    {
+        showManageScheduleModal = false;
+        StateHasChanged();
+    }
+
+    // Add meal to day functionality
+    private async void ShowAddMealToDayModal(DateTime day)
+    {
+        selectedDay = day;
+
+        // Get or create the schedule for this day
+        var existingSchedule = await Context.FoodSchedules
+            .Include(fs => fs.Meals)
+            .FirstOrDefaultAsync(fs => fs.Day.Date == day.Date);
+
+        selectedDaySchedule = existingSchedule ?? new FoodSchedule { Day = day };
+
+        // Load available meals (meals not scheduled for any day, or already in this day's schedule)
+        availableMeals = await Context.FoodMeals
+            .Where(fm => fm.FoodScheduleId == null || fm.FoodScheduleId == selectedDaySchedule.Id)
+            .OrderBy(fm => fm.Name)
+            .ToListAsync();
+
+        // Pre-select meals that are already in this day's schedule
+        selectedMealsForDay.Clear();
+        if (selectedDaySchedule.Meals != null)
+        {
+            foreach (var meal in selectedDaySchedule.Meals)
+            {
+                selectedMealsForDay.Add(meal.Id);
+            }
+        }
+
+        showAddMealToDayModal = true;
+        StateHasChanged();
+    }
+
+    private async void ShowAddMealToDayModal(FoodSchedule schedule)
+    {
+        selectedDay = schedule.Day;
+        selectedDaySchedule = schedule;
+
+        // Load available meals (meals not scheduled for any day, or already in this day's schedule)
+        availableMeals = await Context.FoodMeals
+            .Where(fm => fm.FoodScheduleId == null || fm.FoodScheduleId == schedule.Id)
+            .OrderBy(fm => fm.Name)
+            .ToListAsync();
+
+        // Pre-select meals that are already in this day's schedule
+        selectedMealsForDay.Clear();
+        if (schedule.Meals != null)
+        {
+            foreach (var meal in schedule.Meals)
+            {
+                selectedMealsForDay.Add(meal.Id);
+            }
+        }
+
+        showAddMealToDayModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddMealToDayModal()
+    {
+        showAddMealToDayModal = false;
+        selectedMealsForDay.Clear();
+        StateHasChanged();
+    }
+
+    private void ToggleMealSelection(int mealId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            selectedMealsForDay.Add(mealId);
+        }
+        else
+        {
+            selectedMealsForDay.Remove(mealId);
+        }
+        StateHasChanged();
+    }
+
+    private async Task AddSelectedMealsToDay()
+    {
+        if (selectedDaySchedule == null) return;
+
+        try
+        {
+            // Get or create the food schedule for the selected day
+            var existingSchedule = await Context.FoodSchedules
+                .Include(fs => fs.Meals)
+                .FirstOrDefaultAsync(fs => fs.Day.Date == selectedDay.Date);
+
+            if (existingSchedule == null)
+            {
+                existingSchedule = new FoodSchedule { Day = selectedDay.Date };
+                Context.FoodSchedules.Add(existingSchedule);
+                await Context.SaveChangesAsync(); // Save to get the ID
+            }
+
+            // First, remove all meals from this schedule
+            var currentMeals = await Context.FoodMeals
+                .Where(fm => fm.FoodScheduleId == existingSchedule.Id)
+                .ToListAsync();
+
+            foreach (var meal in currentMeals)
+            {
+                meal.FoodScheduleId = null;
+                Context.FoodMeals.Update(meal);
+            }
+
+            // Then add the selected meals to the schedule
+            foreach (var mealId in selectedMealsForDay)
+            {
+                var meal = await Context.FoodMeals.FindAsync(mealId);
+                if (meal != null)
+                {
+                    meal.FoodScheduleId = existingSchedule.Id;
+                    Context.FoodMeals.Update(meal);
+                }
+            }
+
+            await Context.SaveChangesAsync();
+            await LoadWeeklyScheduleData(); // Refresh the weekly schedule data
+            await LoadFoodData(); // Also refresh main food data
+            CloseAddMealToDayModal();
+            
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error updating meals in schedule: {ex.Message}");
+        }
+    }
+
+    private async Task RemoveMealFromDay(FoodSchedule schedule, FoodMeal meal)
+    {
+        bool confirm = await JSRuntime.InvokeAsync<bool>("confirm", $"Remove {meal.Name} from {schedule.Day.ToString("dddd")}?");
+        if (confirm)
+        {
+            try
+            {
+                meal.FoodScheduleId = null;
+                Context.FoodMeals.Update(meal);
+                await Context.SaveChangesAsync();
+
+                // Check if the schedule has any meals left, if not, remove the schedule
+                var updatedSchedule = await Context.FoodSchedules
+                    .Include(fs => fs.Meals)
+                    .FirstOrDefaultAsync(fs => fs.Id == schedule.Id);
+
+                if (updatedSchedule != null && !updatedSchedule.Meals.Any())
+                {
+                    Context.FoodSchedules.Remove(updatedSchedule);
+                    await Context.SaveChangesAsync();
+                }
+
+                await LoadFoodData(); // Refresh data
+               
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error removing meal: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task RemoveMealFromSchedule(FoodSchedule schedule, FoodMeal meal)
+    {
+        bool confirm = await JSRuntime.InvokeAsync<bool>("confirm", $"Remove {meal.Name} from {schedule.Day.ToString("dddd")}?");
+        if (confirm)
+        {
+            try
+            {
+                meal.FoodScheduleId = null;
+                Context.FoodMeals.Update(meal);
+                await Context.SaveChangesAsync();
+
+                // Remove the schedule if it's now empty
+                var updatedSchedule = await Context.FoodSchedules
+                    .Include(fs => fs.Meals)
+                    .FirstOrDefaultAsync(fs => fs.Id == schedule.Id);
+
+                if (updatedSchedule != null && !updatedSchedule.Meals.Any())
+                {
+                    Context.FoodSchedules.Remove(updatedSchedule);
+                    await Context.SaveChangesAsync();
+                }
+
+                await LoadWeeklyScheduleData(); // Refresh weekly schedule data
+                
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error removing meal: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task ClearDaySchedule(FoodSchedule schedule)
+    {
+        bool confirm = await JSRuntime.InvokeAsync<bool>("confirm", $"Clear all meals from {schedule.Day.ToString("dddd")}?");
+        if (confirm)
+        {
+            try
+            {
+                foreach (var meal in schedule.Meals)
+                {
+                    meal.FoodScheduleId = null;
+                    Context.FoodMeals.Update(meal);
+                }
+
+                // Remove the empty schedule
+                Context.FoodSchedules.Remove(schedule);
+                await Context.SaveChangesAsync();
+                await LoadFoodData(); // Refresh data
+                
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error clearing schedule: {ex.Message}");
+            }
+        }
+    }
+
+    // Meal management
+    private void ShowAddMealModal()
+    {
+        currentMeal = new FoodMeal();
+        editingMeal = null;
+        showMealModal = true;
+        StateHasChanged();
+    }
+
+    private async Task EditMeal(FoodMeal meal)
+    {
+        editingMeal = meal;
+        currentMeal = new FoodMeal
+        {
+            Id = meal.Id,
+            Name = meal.Name,
+            Description = meal.Description,
+            Type = meal.Type,
+            Price = meal.Price,
+            PreparationTime = meal.PreparationTime,
+            Servings = meal.Servings,
+            ChefName = meal.ChefName,
+            IsVegetarian = meal.IsVegetarian,
+            Allergens = meal.Allergens
+        };
+        showMealModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseMealModal()
+    {
+        showMealModal = false;
+        editingMeal = null;
+        currentMeal = new FoodMeal();
+        StateHasChanged();
+    }
+
+    private bool CanSaveMeal()
+    {
+        return !string.IsNullOrWhiteSpace(currentMeal.Name) &&
+               !string.IsNullOrWhiteSpace(currentMeal.Description) &&
+               currentMeal.Price > 0 &&
+               currentMeal.PreparationTime > 0 &&
+               currentMeal.Servings > 0;
+    }
+
+    private async Task SaveMeal()
+    {
+        if (!CanSaveMeal()) return;
+
+        try
+        {
+            if (editingMeal != null)
+            {
+                // Update existing meal
+                var existingMeal = await Context.FoodMeals.FindAsync(editingMeal.Id);
+                if (existingMeal != null)
+                {
+                    existingMeal.Name = currentMeal.Name.Trim();
+                    existingMeal.Description = currentMeal.Description.Trim();
+                    existingMeal.Type = currentMeal.Type;
+                    existingMeal.Price = currentMeal.Price;
+                    existingMeal.PreparationTime = currentMeal.PreparationTime;
+                    existingMeal.Servings = currentMeal.Servings;
+                    existingMeal.ChefName = currentMeal.ChefName?.Trim();
+                    existingMeal.IsVegetarian = currentMeal.IsVegetarian;
+                    existingMeal.Allergens = currentMeal.Allergens?.Trim();
+                    existingMeal.UpdatedAt = DateTime.Now;
+
+                    Context.FoodMeals.Update(existingMeal);
+                }
+            }
+            else
+            {
+                // Add new meal
+                currentMeal.CreatedAt = DateTime.Now;
+                currentMeal.UpdatedAt = DateTime.Now;
+
+                Context.FoodMeals.Add(currentMeal);
+            }
+
+            await Context.SaveChangesAsync();
+            await LoadFoodData(); // Refresh data to show the new/updated meal
+            CloseMealModal();
+            
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error saving meal: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteMeal(FoodMeal meal)
+    {
+        bool confirm = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete {meal.Name}?");
+        if (confirm)
+        {
+            try
+            {
+                // First, check if the meal is scheduled for any days
+                var scheduledDays = await Context.FoodSchedules
+                    .Where(fs => fs.Meals.Any(m => m.Id == meal.Id))
+                    .ToListAsync();
+
+                // Remove the meal from all schedules
+                foreach (var schedule in scheduledDays)
+                {
+                    var mealToRemove = schedule.Meals.FirstOrDefault(m => m.Id == meal.Id);
+                    if (mealToRemove != null)
+                    {
+                        mealToRemove.FoodScheduleId = null;
+                        Context.FoodMeals.Update(mealToRemove);
+                    }
+                }
+
+                // Check if MealVotes table still exists and remove any votes for this meal
+                try
+                {
+                    var mealVotes = await Context.MealVotes
+                        .Where(mv => mv.MealId == meal.Id)
+                        .ToListAsync();
+
+                    if (mealVotes.Any())
+                    {
+                        Context.MealVotes.RemoveRange(mealVotes);
+                    }
+                }
+                catch
+                {
+                    // MealVotes table might not exist anymore, ignore this error
+                }
+
+                // Now delete the meal
+                Context.FoodMeals.Remove(meal);
+                await Context.SaveChangesAsync();
+
+                await LoadFoodData(); // Refresh data
+                
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error details: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                }
+
+                await JSRuntime.InvokeVoidAsync("alert", $"Error deleting meal: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task RefreshSchedule()
+    {
+        await LoadFoodData();
+        
+    }
+
+    private async Task RefreshAllMeals()
+    {
+        await LoadAllMeals();
+        
+    }
+
+    // Helper methods
+    private string GetMealTypeIcon(string type)
+    {
+        return type.ToLower() switch
+        {
+            "breakfast" => "🥞",
+            "lunch" => "🍲",
+            "dinner" => "🍽️",
+            "snack" => "🍎",
+            _ => "🍴"
+        };
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/studenthome");
+    private void RedirectToHome() => Navigation.NavigateTo("/");
+}
+<style>
+    /* Minimal Purple/Blue Theme */
+    .student-food {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    /* Header */
+    .header-bar {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 1.5rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+
+        .header-bar h2 {
+            margin: 0;
+            color: #4c51bf;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+    .back-btn {
+        background: white;
+        color: #4c51bf;
+        border: 1px solid #e2e8f0;
+        padding: 0.75rem 1.25rem;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 0.9rem;
+        transition: all 0.2s ease;
+    }
+
+        .back-btn:hover {
+            background: #4c51bf;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(76, 81, 191, 0.3);
+        }
+
+    .food-stats {
+        display: flex;
+        gap: 1.5rem;
+        font-size: 0.875rem;
+        color: #64748b;
+        font-weight: 500;
+    }
+
+    .worker-badge {
+        background: linear-gradient(135deg, #4c51bf, #667eea);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+
+    /* Main Container */
+    .food-container {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    /* Sections */
+    .tomorrow-menu-section,
+    .all-meals-section,
+    .weekly-schedule-section {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        overflow: hidden;
+        backdrop-filter: blur(10px);
+    }
+
+    .section-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #f1f5f9;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(248, 250, 252, 0.8);
+    }
+
+        .section-header h3 {
+            margin: 0;
+            color: #1e293b;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+    .section-actions,
+    .schedule-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    /* Buttons */
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+    .btn-outline {
+        background: transparent;
+        border: 1px solid #cbd5e1;
+        color: #64748b;
+    }
+
+        .btn-outline:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+        }
+
+    .btn-sm {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.8rem;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #4c51bf, #667eea);
+        color: white;
+        box-shadow: 0 2px 8px rgba(76, 81, 191, 0.3);
+    }
+
+        .btn-primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, #434190, #5a67d8);
+            box-shadow: 0 4px 16px rgba(76, 81, 191, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+    .btn-icon {
+        background: none;
+        border: none;
+        padding: 0.5rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+        color: #64748b;
+    }
+
+        .btn-icon:hover {
+            background: #f1f5f9;
+            color: #374151;
+            transform: scale(1.1);
+        }
+
+    /* Tomorrow's Menu */
+    .meals-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1.5rem;
+        padding: 1.5rem;
+    }
+
+    .meal-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+        .meal-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            border-color: #cbd5e1;
+        }
+
+    .meal-header {
+        padding: 1rem 1.25rem;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .meal-type-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+        .meal-type-badge.breakfast {
+            background: linear-gradient(135deg, #fed7aa, #fdba74);
+            color: #9a3412;
+        }
+
+        .meal-type-badge.lunch {
+            background: linear-gradient(135deg, #bbf7d0, #86efac);
+            color: #166534;
+        }
+
+        .meal-type-badge.dinner {
+            background: linear-gradient(135deg, #a5b4fc, #818cf8);
+            color: #3730a3;
+        }
+
+        .meal-type-badge.snack {
+            background: linear-gradient(135deg, #fbcfe8, #f9a8d4);
+            color: #be185d;
+        }
+
+    .meal-content {
+        padding: 1.25rem;
+    }
+
+    .meal-name {
+        margin: 0 0 0.75rem 0;
+        color: #1e293b;
+        font-size: 1.125rem;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    .meal-description {
+        margin: 0 0 1rem 0;
+        color: #64748b;
+        line-height: 1.5;
+        font-size: 0.875rem;
+    }
+
+    .meal-details {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .detail-item {
+        font-size: 0.8rem;
+        color: #475569;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+        .detail-item.vegetarian {
+            color: #059669;
+            font-weight: 600;
+        }
+
+    .allergens {
+        font-size: 0.75rem;
+        color: #dc2626;
+        background: #fef2f2;
+        padding: 0.75rem;
+        border-radius: 8px;
+        border: 1px solid #fecaca;
+    }
+
+    .meal-footer {
+        padding: 1rem 1.25rem;
+        border-top: 1px solid #f1f5f9;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #fafbfc;
+    }
+
+    .meal-chef {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .chef-avatar {
+        font-size: 1rem;
+    }
+
+    .chef-name {
+        font-weight: 500;
+    }
+
+    .meal-price {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #059669;
+    }
+
+    /* All Meals Table */
+    .meals-table-container {
+        overflow-x: auto;
+        border-radius: 0 0 12px 12px;
+    }
+
+    .meals-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+
+        .meals-table th {
+            background: #f8fafc;
+            padding: 1.25rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .meals-table td {
+            padding: 1.25rem 1rem;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+    .meal-row:hover {
+        background: #f8fafc;
+    }
+
+    .meal-row.scheduled {
+        background: #f0f9ff;
+    }
+
+    .meal-name-cell {
+        min-width: 200px;
+    }
+
+    .meal-name-with-icon {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .meal-type-icon {
+        font-size: 1.125rem;
+    }
+
+    .vegetarian-indicator {
+        font-size: 0.7rem;
+        color: #059669;
+        background: #d1fae5;
+        padding: 0.3rem 0.6rem;
+        border-radius: 12px;
+        font-weight: 500;
+    }
+
+    .meal-type-tag {
+        padding: 0.4rem 0.8rem;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+        .meal-type-tag.breakfast {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .meal-type-tag.lunch {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .meal-type-tag.dinner {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .meal-type-tag.snack {
+            background: #fce7f3;
+            color: #be185d;
+        }
+
+    .meal-description-cell {
+        max-width: 300px;
+    }
+
+    .meal-description {
+        color: #6b7280;
+        line-height: 1.4;
+    }
+
+    .allergens-small {
+        margin-top: 0.5rem;
+    }
+
+        .allergens-small small {
+            color: #dc2626;
+        }
+
+    .meal-price-cell {
+        font-weight: 600;
+        color: #059669;
+        text-align: center;
+    }
+
+    .meal-status-cell {
+        text-align: center;
+    }
+
+    .status-badge {
+        padding: 0.4rem 0.8rem;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+        .status-badge.scheduled {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-badge.available {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+    .meal-actions-cell {
+        text-align: center;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+
+    .btn-danger {
+        color: #dc2626;
+    }
+
+        .btn-danger:hover {
+            background: #fef2f2;
+        }
+
+    /* Weekly Schedule */
+    .schedule-days {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+        padding: 1.5rem;
+    }
+
+    .day-schedule {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+        .day-schedule.tomorrow {
+            border-color: #4c51bf;
+            box-shadow: 0 0 0 2px rgba(76, 81, 191, 0.1);
+        }
+
+    .day-header {
+        padding: 1.25rem;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+        .day-header h4 {
+            margin: 0;
+            color: #1e293b;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+    .day-date {
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .day-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .past-day-indicator {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-style: italic;
+    }
+
+    .day-meals {
+        padding: 1rem;
+    }
+
+    .schedule-meal {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+        .schedule-meal:last-child {
+            border-bottom: none;
+        }
+
+    .meal-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1;
+    }
+
+    .meal-type {
+        font-size: 1rem;
+    }
+
+    .meal-name {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #1e293b;
+        margin: 0;
+    }
+
+    .no-meals {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #94a3b8;
+        font-size: 0.875rem;
+    }
+
+    /* Empty States */
+    .empty-menu,
+    .empty-schedule,
+    .empty-meals {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: #64748b;
+    }
+
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-menu h4,
+    .empty-schedule h4,
+    .empty-meals h4 {
+        margin: 0 0 0.5rem 0;
+        color: #475569;
+        font-size: 1.125rem;
+    }
+
+    .empty-menu p,
+    .empty-schedule p,
+    .empty-meals p {
+        margin: 0;
+        font-size: 0.875rem;
+    }
+
+    /* Weekly Schedule Modal */
+    .large-modal {
+        max-width: 1000px;
+    }
+
+    .current-week-display {
+        text-align: center;
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background: #f8fafc;
+        border-radius: 12px;
+    }
+
+        .current-week-display h4 {
+            margin: 0;
+            color: #1e293b;
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+    .weekly-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 0.5rem;
+    }
+
+    .weekly-day {
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: all 0.3s ease;
+    }
+
+        .weekly-day.today {
+            border-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .weekly-day.tomorrow {
+            border-color: #4c51bf;
+            background: #f0f4ff;
+        }
+
+    .weekly-day-header {
+        text-align: center;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+        .weekly-day-header h4 {
+            margin: 0 0 0.5rem 0;
+            color: #1e293b;
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+    .weekly-date {
+        font-size: 0.875rem;
+        color: #64748b;
+        font-weight: 500;
+    }
+
+    .weekly-meals {
+        min-height: 120px;
+        margin-bottom: 1.5rem;
+    }
+
+    .weekly-meal {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        background: #f8fafc;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+    }
+
+        .weekly-meal:last-child {
+            margin-bottom: 0;
+        }
+
+    .weekly-meal-info {
+        flex: 1;
+    }
+
+    .weekly-meal-name {
+        display: block;
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .weekly-meal-details {
+        display: flex;
+        gap: 0.75rem;
+        font-size: 0.75rem;
+    }
+
+    .weekly-meal-type {
+        color: #64748b;
+        background: #e2e8f0;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+    }
+
+    .btn-remove {
+        background: none;
+        border: none;
+        color: #ef4444;
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+    }
+
+        .btn-remove:hover {
+            background: #fef2f2;
+            transform: scale(1.1);
+        }
+
+    .no-weekly-meals {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #94a3b8;
+        font-size: 0.875rem;
+        font-style: italic;
+    }
+
+    .weekly-day-actions {
+        text-align: center;
+    }
+
+    .past-day-message {
+        color: #94a3b8;
+        font-size: 0.875rem;
+    }
+
+    /* Modals */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        width: 100%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #f1f5f9;
+    }
+
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #f1f5f9;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: white;
+    }
+
+        .modal-header h3 {
+            margin: 0;
+            color: #1e293b;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+    .close-btn {
+        background: #f1f5f9;
+        border: none;
+        color: #64748b;
+        font-size: 1.125rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        width: 2.5rem;
+        height: 2.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .close-btn:hover {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+    .modal-body {
+        flex: 1;
+        padding: 1.5rem;
+        overflow-y: auto;
+    }
+
+    .modal-footer {
+        padding: 1.5rem;
+        border-top: 1px solid #f1f5f9;
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-end;
+        background: #fafbfc;
+    }
+
+    /* Forms */
+    .meal-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+        .form-group label {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+            display: block;
+            font-size: 0.875rem;
+        }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        cursor: pointer;
+        margin-top: 1.75rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.875rem;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        font-family: inherit;
+        transition: all 0.3s ease;
+        background: white;
+    }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #4c51bf;
+            box-shadow: 0 0 0 3px rgba(76, 81, 191, 0.1);
+        }
+
+    /* Meal Selection Modal */
+    .available-meals-list h4 {
+        margin: 0 0 1rem 0;
+        color: #1e293b;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+
+    .meal-selection-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .meal-selection-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 1rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+        .meal-selection-item:hover {
+            border-color: #cbd5e1;
+            background: #f8fafc;
+        }
+
+        .meal-selection-item.selected {
+            border-color: #4c51bf;
+            background: #f0f4ff;
+        }
+
+    .meal-selection-checkbox {
+        flex-shrink: 0;
+        margin-top: 0.25rem;
+    }
+
+    .meal-selection-info {
+        flex: 1;
+    }
+
+        .meal-selection-info h5 {
+            margin: 0 0 0.25rem 0;
+            color: #1e293b;
+            font-size: 0.9375rem;
+            font-weight: 600;
+        }
+
+        .meal-selection-info p {
+            margin: 0 0 0.5rem 0;
+            color: #64748b;
+            font-size: 0.8125rem;
+            line-height: 1.4;
+        }
+
+    .meal-selection-details {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+        .meal-selection-details .tag {
+            padding: 0.25rem 0.5rem;
+            background: #f1f5f9;
+            color: #475569;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .meal-selection-details .price {
+            font-weight: 600;
+            color: #059669;
+            font-size: 0.8125rem;
+        }
+
+    .no-available-meals {
+        text-align: center;
+        padding: 2rem;
+        color: #64748b;
+        font-size: 0.875rem;
+    }
+
+    /* Loading and Unauthorized */
+    .loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 50vh;
+        gap: 1rem;
+    }
+
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f1f5f9;
+        border-left: 4px solid #4c51bf;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .unauthorized-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 2rem;
+    }
+
+    .unauthorized-card {
+        background: white;
+        padding: 3rem 2rem;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        max-width: 400px;
+        width: 100%;
+    }
+
+    .unauthorized-icon {
+        font-size: 4rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .unauthorized-card h3 {
+        margin: 0 0 1rem 0;
+        color: #1e293b;
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+
+    .unauthorized-card p {
+        margin: 0 0 2rem 0;
+        color: #64748b;
+        line-height: 1.5;
+    }
+
+    /* Responsive Design */
+    @@media (max-width: 768px) {
+        .header-bar {
+            padding: 1rem;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 1rem;
+        }
+
+        .food-container {
+            padding: 1rem;
+        }
+
+        .meals-grid {
+            grid-template-columns: 1fr;
+            padding: 1rem;
+        }
+
+        .schedule-days {
+            grid-template-columns: 1fr;
+            padding: 1rem;
+        }
+
+        .section-header {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 1rem;
+        }
+
+        .section-actions,
+        .schedule-actions {
+            justify-content: stretch;
+        }
+
+            .section-actions .btn,
+            .schedule-actions .btn {
+                flex: 1;
+            }
+
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+
+        .weekly-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .modal-content {
+            margin: 0.5rem;
+            max-height: 95vh;
+            border-radius: 12px;
+        }
+
+        .modal-body {
+            padding: 1.25rem;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.25rem;
+        }
+
+        .meals-table {
+            font-size: 0.75rem;
+        }
+
+            .meals-table th,
+            .meals-table td {
+                padding: 0.75rem 0.5rem;
+            }
+    }
+
+    @@media (max-width: 480px) {
+        .food-stats {
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
+
+        .meal-details {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+    }
+</style>

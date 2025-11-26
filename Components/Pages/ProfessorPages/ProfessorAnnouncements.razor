@@ -297,8 +297,6 @@ else
             // Reload announcements to include the new one
             await LoadAnnouncements();
             ResetForm();
-
-            await JSRuntime.InvokeVoidAsync("alert", "Announcement published successfully! All enrolled students will see this announcement.");
         }
         catch (Exception ex)
         {
@@ -327,7 +325,7 @@ else
 
                     // Reload announcements
                     await LoadAnnouncements();
-                    await JSRuntime.InvokeVoidAsync("alert", "Announcement deleted successfully!");
+                    
                 }
             }
             catch (Exception ex)

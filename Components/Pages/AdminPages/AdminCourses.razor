@@ -426,7 +426,7 @@ else
             await LoadDataAsync();
             ClearForm();
 
-            await JSRuntime.InvokeVoidAsync("alert", EditingCourse.Id == 0 ? "Course created successfully!" : "Course updated successfully!");
+            
         }
         catch (Exception ex)
         {
@@ -444,7 +444,7 @@ else
         {
             await GradesService.DeleteCourseAsync(courseId);
             await LoadDataAsync();
-            await JSRuntime.InvokeVoidAsync("alert", "Course deleted successfully!");
+            
         }
         catch (Exception ex)
         {

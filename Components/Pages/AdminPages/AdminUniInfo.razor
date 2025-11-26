@@ -714,7 +714,7 @@ else
             await LoadData();
 
             showFacilityModal = false;
-            await JSRuntime.InvokeVoidAsync("alert", $"Facility {(editingFacility ? "updated" : "added")} successfully!");
+            
         }
         catch (Exception ex)
         {
@@ -737,7 +737,7 @@ else
                 Context.Facilities.Remove(facility);
                 await Context.SaveChangesAsync();
                 await LoadData();
-                await JSRuntime.InvokeVoidAsync("alert", "Facility deleted successfully!");
+                
             }
             catch (Exception ex)
             {
@@ -799,9 +799,9 @@ else
         {
             foreach (var file in e.GetMultipleFiles())
             {
-                if (file.Size > 5 * 1024 * 1024) // 5MB limit
+                if (file.Size > 10 * 1024 * 1024) // 10MB limit
                 {
-                    await JSRuntime.InvokeVoidAsync("alert", $"File {file.Name} is too large. Maximum size is 5MB.");
+                    await JSRuntime.InvokeVoidAsync("alert", $"File {file.Name} is too large. Maximum size is 10MB.");
                     continue;
                 }
 
@@ -876,7 +876,7 @@ else
 
             showUploadModal = false;
             uploadedPhotos.Clear();
-            await JSRuntime.InvokeVoidAsync("alert", "Photos uploaded successfully!");
+            
         }
         catch (Exception ex)
         {
@@ -910,7 +910,7 @@ else
 
                         await Context.SaveChangesAsync();
                         await LoadData();
-                        await JSRuntime.InvokeVoidAsync("alert", "Photo deleted successfully!");
+                        
                     }
                 }
             }
@@ -983,7 +983,7 @@ else
         {
             UpdatePhotoSortOrder();
             await SaveFacilityPhotos();
-            await JSRuntime.InvokeVoidAsync("alert", "Photo order updated successfully!");
+            
         }
         catch (Exception ex)
         {
@@ -1001,7 +1001,7 @@ else
         }
 
         await SaveFacilityPhotos();
-        await JSRuntime.InvokeVoidAsync("alert", "Featured photo cleared!");
+        
     }
 
     private async Task SaveFacilityPhotos()
@@ -1093,7 +1093,7 @@ else
             await LoadData();
 
             showContactModal = false;
-            await JSRuntime.InvokeVoidAsync("alert", "Contact information saved successfully!");
+            
         }
         catch (Exception ex)
         {

@@ -599,8 +599,7 @@ else
 
             CloseExerciseModal();
             await LoadExercises(selectedCourseId);
-            await LoadStatistics(); // Refresh statistics
-            await JSRuntime.InvokeVoidAsync("alert", $"Exercise {(editingExercise.Id == 0 ? "created" : "updated")} successfully!");
+            await LoadStatistics();
         }
         catch (Exception ex)
         {
@@ -620,7 +619,7 @@ else
             await ExercisesService.DeleteExerciseAsync(exerciseId);
             await LoadExercises(selectedCourseId);
             await LoadStatistics(); // Refresh statistics
-            await JSRuntime.InvokeVoidAsync("alert", "Exercise deleted successfully!");
+            
         }
         catch (Exception ex)
         {
@@ -665,7 +664,7 @@ else
             CalculateAverageGradeFromSubmissions();
 
             StateHasChanged();
-            await JSRuntime.InvokeVoidAsync("alert", "Grade saved successfully!");
+            
         }
         catch (Exception ex)
         {

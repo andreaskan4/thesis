@@ -27,6 +27,11 @@ namespace Thesis.Models
         public bool IsRead { get; set; } = false;
         public DateTime? ReadAt { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public int RecipientId { get; set; }
+        public string? RecipientName { get; set; }
+        public string? RecipientEmail { get; set; }
+        public string? RecipientRole { get; set; }
+        public int SenderId { get; set; }
 
         // Navigation property for replies
         public List<MessageReply> Replies { get; set; } = new List<MessageReply>();

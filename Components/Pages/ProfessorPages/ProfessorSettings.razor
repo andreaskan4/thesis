@@ -384,7 +384,6 @@ else
 
             var teacherId = await GetCurrentTeacherId();
             await TeacherSettingsService.UpdateTeacherSettingsAsync(teacherId, teacherSettings);
-            await JSRuntime.InvokeVoidAsync("alert", "Settings saved successfully!");
         }
         catch (Exception ex)
         {
@@ -409,7 +408,7 @@ else
             teacherSettings = new TeacherSettings();
             defaultDueTimeString = "23:59";
             StateHasChanged();
-            await JSRuntime.InvokeVoidAsync("alert", "Settings reset to defaults!");
+            
         }
         catch (Exception ex)
         {

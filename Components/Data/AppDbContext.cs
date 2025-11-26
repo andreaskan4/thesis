@@ -27,6 +27,12 @@ namespace Thesis.Data
         public DbSet<Exercise> Exercises { get; set; }
         public DbSet<ExerciseSubmission> ExerciseSubmissions { get; set; }
         public DbSet<TeacherSettings> TeacherSettings { get; set; }
+        public DbSet<ForumQuestion> ForumQuestions { get; set; }
+        public DbSet<ForumAnswer> ForumAnswers { get; set; }
+        public DbSet<FoodMeal> FoodMeals { get; set; }
+        public DbSet<FoodSchedule> FoodSchedules { get; set; }
+        public DbSet<MealVote> MealVotes { get; set; }
+        public DbSet<CafeteriaWorker> CafeteriaWorkers { get; set; }
 
         // ✅ Rename to match the actual table name
         public DbSet<AdminSystemSettings> AdminSystemSettings { get; set; }
@@ -58,7 +64,41 @@ namespace Thesis.Data
             {
                 entity.HasKey(e => e.Id);
             });
+            modelBuilder.Entity<ForumQuestion>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.CreatedAt).IsRequired();
+                entity.Property(e => e.UpdatedAt).IsRequired();
 
+                // Relationship with User (Student)
+                entity.HasOne(e => e.Student)
+                      .WithMany()
+                      .HasForeignKey(e => e.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configure ForumAnswer
+            modelBuilder.Entity<ForumAnswer>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Content).IsRequired();
+                entity.Property(e => e.CreatedAt).IsRequired();
+                entity.Property(e => e.UpdatedAt).IsRequired();
+
+                // Relationship with ForumQuestion
+                entity.HasOne(e => e.Question)
+                      .WithMany(q => q.Answers)
+                      .HasForeignKey(e => e.QuestionId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Relationship with User (Student who answered)
+                entity.HasOne(e => e.Student)
+                      .WithMany()
+                      .HasForeignKey(e => e.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
             modelBuilder.Entity<Enrollment>(entity =>
             {
                 entity.HasKey(e => e.Id);
@@ -115,6 +155,26 @@ namespace Thesis.Data
                 .WithOne(r => r.ParentMessage)
                 .HasForeignKey(r => r.MessageId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<FoodMeal>()
+                .Property(f => f.Price)
+                .HasConversion<double>()
+                .HasColumnType("decimal(10,2)");
+
+            // Configure relationships
+            modelBuilder.Entity<FoodMeal>()
+                .HasOne(fm => fm.FoodSchedule)
+                .WithMany(fs => fs.Meals)
+                .HasForeignKey(fm => fm.FoodScheduleId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<MealVote>()
+                .HasIndex(mv => new { mv.StudentId, mv.MealId, mv.VoteDate })
+                .IsUnique();
+
+            modelBuilder.Entity<CafeteriaWorker>()
+                .HasIndex(cw => cw.StudentId)
+                .IsUnique();
         }
     }
 }

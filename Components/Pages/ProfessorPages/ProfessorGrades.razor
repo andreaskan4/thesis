@@ -380,7 +380,6 @@ else
             student.UpdatedAt = now;
             StateHasChanged();
 
-            await JSRuntime.InvokeVoidAsync("alert", $"Grade updated successfully for {student.StudentName}");
         }
         catch (Exception ex)
         {
@@ -428,7 +427,7 @@ else
                 await SaveStudentGrade(student);
             }
 
-            await JSRuntime.InvokeVoidAsync("alert", $"All grades updated to {bulkGradeValue} successfully!");
+            
         }
         catch (Exception ex)
         {

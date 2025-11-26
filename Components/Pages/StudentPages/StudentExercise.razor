@@ -618,7 +618,7 @@ else
             await LoadExercises(selectedCourseId);
 
             CloseSubmissionModal();
-            await JSRuntime.InvokeVoidAsync("alert", "Submission saved successfully!");
+            
         }
         catch (Exception ex)
         {
@@ -649,7 +649,7 @@ else
         if (selectedCourseId > 0)
         {
             await LoadExercises(selectedCourseId);
-            await JSRuntime.InvokeVoidAsync("alert", "Exercises refreshed!");
+            
         }
     }
 

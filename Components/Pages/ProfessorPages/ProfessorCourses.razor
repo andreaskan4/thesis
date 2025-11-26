@@ -288,8 +288,6 @@ else
                 course.DifficultyRating = difficulty;
                 Context.Courses.Update(course);
                 await Context.SaveChangesAsync();
-
-                await JSRuntime.InvokeVoidAsync("alert", $"Difficulty rating updated to {difficulty}/5.0");
                 StateHasChanged();
             }
         }
@@ -309,8 +307,6 @@ else
                 course.GradingMethod = method;
                 Context.Courses.Update(course);
                 await Context.SaveChangesAsync();
-
-                await JSRuntime.InvokeVoidAsync("alert", $"Grading method updated to {GetGradingMethodText(method)}");
                 StateHasChanged();
             }
         }

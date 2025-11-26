@@ -33,17 +33,23 @@ else
             <button class="back-btn" @onclick="GoBack">← Back to Dashboard</button>
             <h2>📨 Message Center</h2>
             <div class="header-actions">
+                <button class="btn btn-primary" @onclick="ShowNewMessageModal">
+                    ✉️ New Message
+                </button>
                 <div class="message-stats">
-                    <span class="stat-item @(activeFilter == "all" ? "active" : "")" @onclick='() => SetFilter(" all")'>
+                    <span class="stat-item @(activeFilter == "all" ? "active" : "")" @onclick='() => SetFilter("all")'>
                         📬 All: @allMessagesCount
                     </span>
-                    <span class="stat-item @(activeFilter == "unread" ? "active" : "")" @onclick='() => SetFilter(" unread")'>
+                    <span class="stat-item @(activeFilter == "unread" ? "active" : "")" @onclick='() => SetFilter("unread")'>
                         📪 Unread: @unreadMessagesCount
                     </span>
-                    <span class="stat-item @(activeFilter == "students" ? "active" : "")" @onclick='() => SetFilter(" students")'>
+                    <span class="stat-item @(activeFilter == "sent" ? "active" : "")" @onclick='() => SetFilter("sent")'>
+                        📤 Sent: @sentMessagesCount
+                    </span>
+                    <span class="stat-item @(activeFilter == "students" ? "active" : "")" @onclick='() => SetFilter("students")'>
                         🎓 Students: @studentMessagesCount
                     </span>
-                    <span class="stat-item @(activeFilter == "teachers" ? "active" : "")" @onclick='() => SetFilter(" teachers")'>
+                    <span class="stat-item @(activeFilter == "teachers" ? "active" : "")" @onclick='() => SetFilter("teachers")'>
                         👨‍🏫 Teachers: @teacherMessagesCount
                     </span>
                 </div>
@@ -88,14 +94,32 @@ else
                                     </div>
                                     <div class="message-preview">
                                         <div class="message-header">
-                                            <span class="sender-name">@message.SenderName</span>
+                                            <span class="sender-name">
+                                                @if (message.SenderRole == "Admin")
+                                                {
+                                                    <text>You → @message.RecipientName</text>
+                                                }
+                                                else
+                                                {
+                                                    <text>@message.SenderName</text>
+                                                }
+                                            </span>
                                             <span class="message-time">@FormatMessageTime(message.CreatedAt)</span>
                                         </div>
                                         <div class="message-subject">@message.Subject</div>
                                         <div class="message-excerpt">@GetMessageExcerpt(message.Content)</div>
                                         <div class="message-meta">
-                                            <span class="sender-role">@message.SenderRole</span>
-                                            @if (!message.IsRead)
+                                            <span class="sender-role">
+                                                @if (message.SenderRole == "Admin")
+                                                {
+                                                    <text>To: @message.RecipientRole</text>
+                                                }
+                                                else
+                                                {
+                                                    <text>@message.SenderRole</text>
+                                                }
+                                            </span>
+                                            @if (!message.IsRead && message.SenderRole != "Admin")
                                             {
                                                 <span class="unread-badge">NEW</span>
                                             }
@@ -105,6 +129,12 @@ else
                                             }
                                         </div>
                                     </div>
+                                    @if (message.SenderRole == "Admin")
+                                    {
+                                        <button class="delete-message-btn" @onclick:stopPropagation="true" @onclick="() => DeleteSingleMessage(message)" title="Delete this message">
+                                            🗑️
+                                        </button>
+                                    }
                                 </div>
                             }
 
@@ -142,58 +172,80 @@ else
                                             }
                                         </div>
                                         <div class="sender-details">
-                                            <div class="sender-name">@selectedMessage.SenderName</div>
-                                            <div class="sender-email">@selectedMessage.SenderEmail • @selectedMessage.SenderRole</div>
+                                            @if (selectedMessage.SenderRole == "Admin")
+                                            {
+                                                <div class="sender-name">You → @selectedMessage.RecipientName</div>
+                                                <div class="sender-email">@selectedMessage.RecipientEmail • To: @selectedMessage.RecipientRole</div>
+                                            }
+                                            else
+                                            {
+                                                <div class="sender-name">@selectedMessage.SenderName</div>
+                                                <div class="sender-email">@selectedMessage.SenderEmail • @selectedMessage.SenderRole</div>
+                                            }
                                         </div>
                                     </div>
                                 </div>
                                 <div class="message-actions">
-                                    <button class="btn btn-outline" @onclick="MarkAsRead" title="Mark as read">
-                                        @if (selectedMessage.IsRead)
-                                        {
-                                            <span>📭 Mark Unread</span>
-                                        }
-                                        else
-                                        {
-                                            <span>📬 Mark Read</span>
-                                        }
-                                    </button>
-                                    <button class="btn btn-danger" @onclick="DeleteMessage" title="Delete message">
-                                        🗑️ Delete
-                                    </button>
+                                    @if (selectedMessage.SenderRole != "Admin")
+                                    {
+                                        <button class="btn btn-outline" @onclick="MarkAsRead" title="Mark as read">
+                                            @if (selectedMessage.IsRead)
+                                            {
+                                                <span>📭 Mark Unread</span>
+                                            }
+                                            else
+                                            {
+                                                <span>📬 Mark Read</span>
+                                            }
+                                        </button>
+                                    }
                                 </div>
                             </div>
 
                             <div class="message-conversation">
-                                <!-- Original Message -->
-                                <div class="conversation-item original">
-                                    <div class="message-content">
-                                        <div class="message-text">@selectedMessage.Content</div>
-                                        <div class="message-time">@FormatDetailedTime(selectedMessage.CreatedAt)</div>
-                                    </div>
-                                </div>
-
-                                <!-- Replies -->
-                                @foreach (var reply in selectedMessage.Replies.OrderBy(r => r.CreatedAt))
-                                {
-                                    <div class="conversation-item @(reply.SenderRole == "Admin" ? "reply admin-reply" : "reply")">
+                                <!-- Conversation Scroll Area -->
+                                <div class="conversation-scroll-area">
+                                    <!-- Original Message -->
+                                    <div class="conversation-item @(selectedMessage.SenderRole == "Admin" ? "sent" : "received")">
                                         <div class="message-content">
-                                            <div class="reply-header">
-                                                <span class="replier-name">@reply.SenderName</span>
-                                                <span class="replier-role">@reply.SenderRole</span>
-                                            </div>
-                                            <div class="message-text">@reply.ReplyContent</div>
-                                            <div class="message-time">@FormatDetailedTime(reply.CreatedAt)</div>
+                                            <div class="message-text">@selectedMessage.Content</div>
+                                            <div class="message-time">@FormatDetailedTime(selectedMessage.CreatedAt)</div>
+                                            @if (selectedMessage.SenderRole == "Admin")
+                                            {
+                                                <button class="delete-single-btn" @onclick="() => DeleteSingleReply(selectedMessage)" title="Delete this message">
+                                                    🗑️
+                                                </button>
+                                            }
                                         </div>
                                     </div>
-                                }
 
-                                <!-- Reply Form -->
+                                    <!-- Replies -->
+                                    @foreach (var reply in selectedMessage.Replies.OrderBy(r => r.CreatedAt))
+                                    {
+                                        <div class="conversation-item @(reply.SenderRole == "Admin" ? "sent" : "received")">
+                                            <div class="message-content">
+                                                <div class="reply-header">
+                                                    <span class="replier-name">@reply.SenderName</span>
+                                                    <span class="replier-role">@reply.SenderRole</span>
+                                                </div>
+                                                <div class="message-text">@reply.ReplyContent</div>
+                                                <div class="message-time">@FormatDetailedTime(reply.CreatedAt)</div>
+                                                @if (reply.SenderRole == "Admin")
+                                                {
+                                                    <button class="delete-single-btn" @onclick="() => DeleteSingleReply(reply)" title="Delete this reply">
+                                                        🗑️
+                                                    </button>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+
+                                <!-- Reply Section -->
                                 <div class="reply-section">
-                                    <h4>✏️ Write a Reply</h4>
                                     <form class="reply-form">
                                         <div class="form-group">
-                                            <textarea @bind="replyMessage" class="form-control" rows="4"
+                                            <textarea @bind="replyMessage" class="form-control"
                                                       placeholder="Type your reply here..."></textarea>
                                         </div>
                                         <div class="form-actions">
@@ -224,12 +276,154 @@ else
             }
         </div>
     </div>
+
+    <!-- New Message Modal -->
+    @if (showNewMessageModal)
+    {
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>✉️ New Message</h3>
+                    <button class="close-btn" @onclick="CloseNewMessageModal">×</button>
+                </div>
+                <div class="modal-body">
+                    <!-- Debug info -->
+                    <div style="font-size: 12px; color: #666; margin-bottom: 10px; background: #f5f5f5; padding: 8px; border-radius: 4px;">
+                        Debug Info: Total Users: @allUsers.Count, Filtered: @filteredUsers.Count,
+                        Search: '@userSearchTerm', Role: '@selectedUserRole'
+                        @if (!string.IsNullOrEmpty(userLoadError))
+                        {
+                            <br />
+                
+                            <span style="color: red;">Error: @userLoadError</span>
+                        }
+                    </div>
+
+                    <form class="new-message-form">
+                        <!-- Search Bar for Users -->
+                        <div class="form-group">
+                            <label>Search Users</label>
+                            <input type="text" @bind="userSearchTerm" @oninput="OnUserSearch"
+                                   placeholder="Search by name or email..." class="form-control search-input" />
+                        </div>
+
+                        <!-- User Type Filter -->
+                        <div class="form-group">
+                            <label>Filter by Role</label>
+                            <div class="role-filter-buttons">
+                                <button type="button" class="role-filter-btn @(selectedUserRole == "all" ? "active" : "")"
+                                        @onclick='() => SetUserRoleFilter("all")'>
+                                    All Users (@allUsers.Count)
+                                </button>
+                                <button type="button" class="role-filter-btn @(selectedUserRole == "Student" ? "active" : "")"
+                                        @onclick='() => SetUserRoleFilter("Student")'>
+                                    Students (@allUsers.Count(u => u.Role == "Student"))
+                                </button>
+                                <button type="button" class="role-filter-btn @(selectedUserRole == "Teacher" ? "active" : "")"
+                                        @onclick='() => SetUserRoleFilter("Teacher")'>
+                                    Teachers (@allUsers.Count(u => u.Role == "Teacher"))
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- User Selection -->
+                        <div class="form-group">
+                            <label>Select Recipient</label>
+                            <div class="users-list">
+                                @if (isLoadingUsers)
+                                {
+                                    <div class="loading-users">
+                                        <div class="spinner"></div>
+                                        <p>Loading users...</p>
+                                    </div>
+                                }
+                                else if (!string.IsNullOrEmpty(userLoadError))
+                                {
+                                    <div class="error-loading-users">
+                                        <div class="error-icon">❌</div>
+                                        <h4>Error Loading Users</h4>
+                                        <p>@userLoadError</p>
+                                        <button class="btn btn-outline" @onclick="LoadUsersAsync">Retry</button>
+                                    </div>
+                                }
+                                else if (filteredUsers.Any())
+                                {
+                                    foreach (var user in filteredUsers)
+                                    {
+                                        <div class="user-item @(selectedUser?.Id == user.Id ? "selected" : "")"
+                                             @onclick="() => SelectUser(user)">
+                                            <div class="user-avatar @user.Role.ToLower()">
+                                                @if (user.Role == "Student")
+                                                {
+                                                    <text>🎓</text>
+                                                }
+                                                else if (user.Role == "Teacher")
+                                                {
+                                                    <text>👨‍🏫</text>
+                                                }
+                                                else
+                                                {
+                                                    <text>👤</text>
+                                                }
+                                            </div>
+                                            <div class="user-info">
+                                                <div class="user-name">@user.Name</div>
+                                                <div class="user-details">
+                                                    <span class="user-email">@user.Email</span>
+                                                    <span class="user-role">@user.Role</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="no-users-found">
+                                        <div class="empty-icon">👤</div>
+                                        <h4>No Users Found</h4>
+                                        <p>Try adjusting your search or filter criteria</p>
+                                        <p style="font-size: 12px; margin-top: 10px;">
+                                            Total users in database: @allUsers.Count<br />
+                                            Students: @allUsers.Count(u => u.Role == "Student")<br />
+                                            Teachers: @allUsers.Count(u => u.Role == "Teacher")
+                                        </p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Message Subject -->
+                        <div class="form-group">
+                            <label>Subject</label>
+                            <input type="text" @bind="newMessage.Subject" class="form-control"
+                                   placeholder="Enter message subject..." />
+                        </div>
+
+                        <!-- Message Content -->
+                        <div class="form-group">
+                            <label>Message</label>
+                            <textarea @bind="newMessage.Content" class="form-control message-textarea"
+                                      placeholder="Type your message here..." rows="6"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" @onclick="CloseNewMessageModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SendNewMessage"
+                            disabled="@(!CanSendMessage())">
+                        Send Message
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @code {
     private bool isAuthChecked = false;
     private bool isAuthorized = false;
     private bool isLoading = true;
+    private bool showNewMessageModal = false;
 
     // Messages
     private List<Message> allMessages = new();
@@ -242,8 +436,19 @@ else
     // Stats
     private int allMessagesCount = 0;
     private int unreadMessagesCount = 0;
+    private int sentMessagesCount = 0;
     private int studentMessagesCount = 0;
     private int teacherMessagesCount = 0;
+
+    // New Message Modal
+    private NewMessageModel newMessage = new();
+    private List<User> allUsers = new();
+    private List<User> filteredUsers = new();
+    private string userSearchTerm = "";
+    private string selectedUserRole = "all";
+    private User? selectedUser = null;
+    private bool isLoadingUsers = false;
+    private string userLoadError = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -285,9 +490,12 @@ else
             isLoading = true;
             StateHasChanged();
 
-            // Load messages with replies
+            var currentUser = AuthStateService.CurrentUser;
+            if (currentUser == null) return;
+
             allMessages = await Context.Messages
                 .Include(m => m.Replies)
+                .Where(m => m.SenderId == currentUser.Id || m.RecipientId == currentUser.Id)
                 .OrderByDescending(m => m.CreatedAt)
                 .ToListAsync();
 
@@ -300,53 +508,146 @@ else
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading messages: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading messages: {ex.Message}");
             isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        try
+        {
+            isLoadingUsers = true;
+            userLoadError = "";
+            StateHasChanged();
+
+            Console.WriteLine("Starting to load users from database...");
+
+            // Test database connection first
+            var testConnection = await Context.Users.AnyAsync();
+            Console.WriteLine($"Database connection test: {testConnection}");
+
+            // Load all users with Student or Teacher role
+            allUsers = await Context.Users
+                .Where(u => u.Role == "Student" || u.Role == "Teacher")
+                .OrderBy(u => u.Name)
+                .ToListAsync();
+
+            Console.WriteLine($"Successfully loaded {allUsers.Count} users from database");
+
+            if (allUsers.Any())
+            {
+                Console.WriteLine("Sample users:");
+                foreach (var user in allUsers.Take(5))
+                {
+                    Console.WriteLine($"- {user.Name} ({user.Email}) - {user.Role}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("No users found in database with Student or Teacher role");
+                userLoadError = "No users found in the database. Please make sure there are students or teachers registered.";
+            }
+
+            // Apply initial filters
+            ApplyUserFilters();
+
+            isLoadingUsers = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading users: {ex.Message}");
+            userLoadError = $"Failed to load users: {ex.Message}";
+            allUsers = new List<User>();
+            filteredUsers = new List<User>();
+            isLoadingUsers = false;
             StateHasChanged();
         }
     }
 
     private void UpdateMessageStats()
     {
+        var currentUser = AuthStateService.CurrentUser;
+        if (currentUser == null) return;
+
         allMessagesCount = allMessages.Count;
-        unreadMessagesCount = allMessages.Count(m => !m.IsRead);
-        studentMessagesCount = allMessages.Count(m => m.SenderRole == "Student");
-        teacherMessagesCount = allMessages.Count(m => m.SenderRole == "Teacher");
+        unreadMessagesCount = allMessages.Count(m => !m.IsRead && m.SenderId != currentUser.Id);
+        sentMessagesCount = allMessages.Count(m => m.SenderId == currentUser.Id);
+        studentMessagesCount = allMessages.Count(m => m.SenderRole == "Student" && m.SenderId != currentUser.Id);
+        teacherMessagesCount = allMessages.Count(m => m.SenderRole == "Teacher" && m.SenderId != currentUser.Id);
     }
 
     private void ApplyFilters()
     {
+        var currentUser = AuthStateService.CurrentUser;
+        if (currentUser == null) return;
+
         var query = allMessages.AsQueryable();
 
-        // Apply role filter
         switch (activeFilter)
         {
             case "unread":
-                query = query.Where(m => !m.IsRead);
+                query = query.Where(m => !m.IsRead && m.SenderId != currentUser.Id);
+                break;
+            case "sent":
+                query = query.Where(m => m.SenderId == currentUser.Id);
                 break;
             case "students":
-                query = query.Where(m => m.SenderRole == "Student");
+                query = query.Where(m => m.SenderRole == "Student" && m.SenderId != currentUser.Id);
                 break;
             case "teachers":
-                query = query.Where(m => m.SenderRole == "Teacher");
-                break;
-            case "all":
-            default:
+                query = query.Where(m => m.SenderRole == "Teacher" && m.SenderId != currentUser.Id);
                 break;
         }
 
-        // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             query = query.Where(m =>
                 m.Subject.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 m.Content.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 m.SenderName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                m.SenderEmail.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                (m.RecipientName != null && m.RecipientName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
             );
         }
 
         filteredMessages = query.OrderByDescending(m => m.CreatedAt).ToList();
+    }
+
+    private void ApplyUserFilters()
+    {
+        Console.WriteLine($"Applying user filters: search='{userSearchTerm}', role='{selectedUserRole}'");
+        Console.WriteLine($"Total users available: {allUsers?.Count ?? 0}");
+
+        if (allUsers == null || !allUsers.Any())
+        {
+            filteredUsers = new List<User>();
+            Console.WriteLine("No users available to filter");
+            return;
+        }
+
+        var query = allUsers.AsQueryable();
+
+        // Apply role filter
+        if (selectedUserRole != "all")
+        {
+            query = query.Where(u => u.Role == selectedUserRole);
+            Console.WriteLine($"Applied role filter: {selectedUserRole}");
+        }
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(userSearchTerm))
+        {
+            var search = userSearchTerm.ToLower();
+            query = query.Where(u =>
+                (u.Name != null && u.Name.ToLower().Contains(search)) ||
+                (u.Email != null && u.Email.ToLower().Contains(search))
+            );
+            Console.WriteLine($"Applied search filter: {userSearchTerm}");
+        }
+
+        filteredUsers = query.OrderBy(u => u.Name).ToList();
+        Console.WriteLine($"Filtered users count: {filteredUsers.Count}");
     }
 
     private void SetFilter(string filter)
@@ -363,16 +664,37 @@ else
         StateHasChanged();
     }
 
+    private void OnUserSearch(ChangeEventArgs e)
+    {
+        userSearchTerm = e.Value?.ToString() ?? "";
+        ApplyUserFilters();
+        StateHasChanged();
+    }
+
+    private void SetUserRoleFilter(string role)
+    {
+        selectedUserRole = role;
+        ApplyUserFilters();
+        StateHasChanged();
+    }
+
+    private void SelectUser(User user)
+    {
+        selectedUser = user;
+        newMessage.RecipientId = user.Id;
+        newMessage.RecipientType = user.Role;
+        Console.WriteLine($"Selected user: {user.Name} ({user.Role})");
+        StateHasChanged();
+    }
+
     private async void SelectMessage(Message message)
     {
         selectedMessage = message;
-
-        // Mark as read when selected
-        if (!message.IsRead)
+        var currentUser = AuthStateService.CurrentUser;
+        if (currentUser != null && !message.IsRead && message.SenderId != currentUser.Id)
         {
             await MarkMessageAsRead(message);
         }
-
         StateHasChanged();
     }
 
@@ -394,7 +716,6 @@ else
     private async Task MarkAsRead()
     {
         if (selectedMessage == null) return;
-
         try
         {
             selectedMessage.IsRead = !selectedMessage.IsRead;
@@ -406,43 +727,84 @@ else
             {
                 selectedMessage.ReadAt = null;
             }
-
             await Context.SaveChangesAsync();
             UpdateMessageStats();
             StateHasChanged();
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error updating message: {ex.Message}");
+            Console.WriteLine($"Error updating message: {ex.Message}");
         }
     }
 
-    private async Task DeleteMessage()
+    private async Task DeleteSingleMessage(Message message)
     {
-        if (selectedMessage == null) return;
+        var currentUser = AuthStateService.CurrentUser;
+        if (currentUser == null || message.SenderId != currentUser.Id) return;
 
         bool confirm = await JSRuntime.InvokeAsync<bool>("confirm",
-            $"Are you sure you want to delete this message from {selectedMessage.SenderName}?");
+            "Are you sure you want to delete this message? This action cannot be undone.");
 
         if (confirm)
         {
             try
             {
-                // Remove all replies first
-                Context.MessageReplies.RemoveRange(selectedMessage.Replies);
-
-                // Then remove the message
-                Context.Messages.Remove(selectedMessage);
-
+                if (message.Replies.Any())
+                {
+                    Context.MessageReplies.RemoveRange(message.Replies);
+                }
+                Context.Messages.Remove(message);
                 await Context.SaveChangesAsync();
-                await LoadMessages();
 
-                selectedMessage = null;
-                await JSRuntime.InvokeVoidAsync("alert", "Message deleted successfully!");
+                if (selectedMessage?.Id == message.Id)
+                {
+                    selectedMessage = null;
+                }
+                await LoadMessages();
             }
             catch (Exception ex)
             {
-                await JSRuntime.InvokeVoidAsync("alert", $"Error deleting message: {ex.Message}");
+                Console.WriteLine($"Error deleting message: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task DeleteSingleReply(object messageOrReply)
+    {
+        var currentUser = AuthStateService.CurrentUser;
+        if (currentUser == null) return;
+
+        bool confirm = await JSRuntime.InvokeAsync<bool>("confirm",
+            "Are you sure you want to delete this message? This action cannot be undone.");
+
+        if (confirm)
+        {
+            try
+            {
+                if (messageOrReply is Message message)
+                {
+                    if (message.SenderId == currentUser.Id)
+                    {
+                        Context.Messages.Remove(message);
+                    }
+                }
+                else if (messageOrReply is MessageReply reply)
+                {
+                    if (reply.SenderRole == "Admin")
+                    {
+                        Context.MessageReplies.Remove(reply);
+                    }
+                }
+                await Context.SaveChangesAsync();
+                await LoadMessages();
+                if (selectedMessage != null)
+                {
+                    selectedMessage = allMessages.FirstOrDefault(m => m.Id == selectedMessage.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting message: {ex.Message}");
             }
         }
     }
@@ -450,15 +812,10 @@ else
     private async Task SendReply()
     {
         if (selectedMessage == null || string.IsNullOrWhiteSpace(replyMessage)) return;
-
         try
         {
             var adminUser = AuthStateService.CurrentUser;
-            if (adminUser == null)
-            {
-                await JSRuntime.InvokeVoidAsync("alert", "Admin user not found.");
-                return;
-            }
+            if (adminUser == null) return;
 
             var reply = new MessageReply
             {
@@ -472,19 +829,14 @@ else
 
             Context.MessageReplies.Add(reply);
             await Context.SaveChangesAsync();
-
-            // Reload the message to get the updated replies
             await LoadMessages();
-
-            // Reselect the message to show the new reply
             selectedMessage = allMessages.FirstOrDefault(m => m.Id == selectedMessage.Id);
-
             replyMessage = "";
-            await JSRuntime.InvokeVoidAsync("alert", "Reply sent successfully!");
+            await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error sending reply: {ex.Message}");
+            Console.WriteLine($"Error sending reply: {ex.Message}");
         }
     }
 
@@ -492,6 +844,74 @@ else
     {
         replyMessage = "";
         StateHasChanged();
+    }
+
+    private async void ShowNewMessageModal()
+    {
+        Console.WriteLine("Opening new message modal...");
+        newMessage = new NewMessageModel();
+        userSearchTerm = "";
+        selectedUserRole = "all";
+        selectedUser = null;
+
+        // Load users when modal opens
+        await LoadUsersAsync();
+
+        showNewMessageModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseNewMessageModal()
+    {
+        showNewMessageModal = false;
+        newMessage = new NewMessageModel();
+        userSearchTerm = "";
+        selectedUserRole = "all";
+        selectedUser = null;
+        userLoadError = "";
+        StateHasChanged();
+    }
+
+    private bool CanSendMessage()
+    {
+        return !string.IsNullOrWhiteSpace(newMessage.Subject) &&
+               !string.IsNullOrWhiteSpace(newMessage.Content) &&
+               selectedUser != null;
+    }
+
+    private async Task SendNewMessage()
+    {
+        if (!CanSendMessage() || selectedUser == null) return;
+        try
+        {
+            var adminUser = AuthStateService.CurrentUser;
+            if (adminUser == null) return;
+
+            var message = new Message
+            {
+                SenderId = adminUser.Id,
+                SenderName = adminUser.Name ?? "Administrator",
+                SenderEmail = adminUser.Email ?? "admin@university.edu",
+                SenderRole = "Admin",
+                RecipientId = selectedUser.Id,
+                RecipientName = selectedUser.Name,
+                RecipientEmail = selectedUser.Email,
+                RecipientRole = selectedUser.Role,
+                Subject = newMessage.Subject.Trim(),
+                Content = newMessage.Content.Trim(),
+                IsRead = false,
+                CreatedAt = DateTime.Now
+            };
+
+            Context.Messages.Add(message);
+            await Context.SaveChangesAsync();
+            await LoadMessages();
+            CloseNewMessageModal();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending message: {ex.Message}");
+        }
     }
 
     // Helper methods
@@ -505,16 +925,10 @@ else
     {
         var now = DateTime.Now;
         var difference = now - dateTime;
-
-        if (difference.TotalMinutes < 1)
-            return "Just now";
-        if (difference.TotalHours < 1)
-            return $"{(int)difference.TotalMinutes}m ago";
-        if (difference.TotalDays < 1)
-            return $"{(int)difference.TotalHours}h ago";
-        if (difference.TotalDays < 7)
-            return $"{(int)difference.TotalDays}d ago";
-
+        if (difference.TotalMinutes < 1) return "Just now";
+        if (difference.TotalHours < 1) return $"{(int)difference.TotalMinutes}m ago";
+        if (difference.TotalDays < 1) return $"{(int)difference.TotalHours}h ago";
+        if (difference.TotalDays < 7) return $"{(int)difference.TotalDays}d ago";
         return dateTime.ToString("MMM dd, yyyy");
     }
 
@@ -525,543 +939,1017 @@ else
 
     private void GoBack() => Navigation.NavigateTo("/adminhome");
     private void RedirectToHome() => Navigation.NavigateTo("/");
-}
-<style>
-.admin-messages {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    padding: 30px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-}
 
-.header-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-    padding: 25px 35px;
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-}
-
-.header-bar h2 {
-    color: #2d3748;
-    font-size: 2rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.message-stats {
-    display: flex;
-    gap: 20px;
-    align-items: center;
-}
-
-.stat-item {
-    padding: 10px 16px;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: 600;
-    color: #6c757d;
-    background: #f8f9fa;
-}
-
-.stat-item:hover {
-    background: #e9ecef;
-    transform: translateY(-2px);
-}
-
-.stat-item.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-}
-
-.messages-container {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-    overflow: hidden;
-}
-
-.messages-layout {
-    display: grid;
-    grid-template-columns: 400px 1fr;
-    height: 70vh;
-}
-
-.messages-list {
-    border-right: 2px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-}
-
-.list-header {
-    padding: 25px;
-    border-bottom: 2px solid #e2e8f0;
-    background: #f8f9fa;
-}
-
-.list-header h3 {
-    margin-bottom: 15px;
-    color: #2d3748;
-    font-size: 1.4rem;
-    font-weight: 700;
-}
-
-.search-input {
-    width: 100%;
-    padding: 12px 16px;
-    border: 2px solid #e2e8f0;
-    border-radius: 12px;
-    font-size: 0.95rem;
-    transition: all 0.3s ease;
-}
-
-.search-input:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-}
-
-.messages-scroll {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px 0;
-}
-
-.message-item {
-    display: flex;
-    padding: 20px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    border-bottom: 1px solid #f1f3f4;
-}
-
-.message-item:hover {
-    background: #f8f9fa;
-}
-
-.message-item.selected {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-    border-right: 4px solid #667eea;
-}
-
-.message-item.unread {
-    background: rgba(59, 130, 246, 0.05);
-    border-left: 4px solid #3b82f6;
-}
-
-.message-avatar {
-    margin-right: 15px;
-}
-
-.avatar {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-}
-
-.avatar.student {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.avatar.teacher {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-}
-
-.avatar.admin {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.message-preview {
-    flex: 1;
-}
-
-.message-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 5px;
-}
-
-.sender-name {
-    font-weight: 700;
-    color: #2d3748;
-    font-size: 1rem;
-}
-
-.message-time {
-    font-size: 0.85rem;
-    color: #6c757d;
-}
-
-.message-subject {
-    font-weight: 600;
-    color: #374151;
-    margin-bottom: 5px;
-    font-size: 0.95rem;
-}
-
-.message-excerpt {
-    color: #6c757d;
-    font-size: 0.9rem;
-    margin-bottom: 8px;
-    line-height: 1.4;
-}
-
-.message-meta {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.sender-role {
-    font-size: 0.8rem;
-    padding: 2px 8px;
-    border-radius: 10px;
-    background: #e9ecef;
-    color: #495057;
-    font-weight: 600;
-}
-
-.unread-badge {
-    font-size: 0.75rem;
-    padding: 2px 6px;
-    border-radius: 8px;
-    background: #dc3545;
-    color: white;
-    font-weight: 700;
-}
-
-.replies-count {
-    font-size: 0.8rem;
-    color: #6c757d;
-}
-
-.empty-messages {
-    text-align: center;
-    padding: 60px 20px;
-    color: #adb5bd;
-}
-
-.empty-icon {
-    font-size: 4rem;
-    margin-bottom: 15px;
-    opacity: 0.5;
-}
-
-.empty-messages h3 {
-    font-size: 1.4rem;
-    margin-bottom: 10px;
-    color: #6c757d;
-}
-
-.message-detail {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
-
-.detail-header {
-    padding: 25px;
-    border-bottom: 2px solid #e2e8f0;
-    background: #f8f9fa;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-}
-
-.message-info h3 {
-    color: #2d3748;
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-bottom: 15px;
-}
-
-.message-sender {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.sender-avatar .avatar {
-    width: 40px;
-    height: 40px;
-    font-size: 1.2rem;
-}
-
-.sender-details .sender-name {
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-
-.sender-email {
-    font-size: 0.9rem;
-    color: #6c757d;
-}
-
-.message-actions {
-    display: flex;
-    gap: 10px;
-}
-
-.message-conversation {
-    flex: 1;
-    overflow-y: auto;
-    padding: 25px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.conversation-item {
-    max-width: 80%;
-    animation: fadeIn 0.3s ease-out;
-}
-
-.conversation-item.original {
-    align-self: flex-start;
-    background: #f8f9fa;
-    padding: 20px;
-    border-radius: 16px;
-    border: 2px solid #e9ecef;
-}
-
-.conversation-item.reply {
-    align-self: flex-end;
-}
-
-.conversation-item.admin-reply {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-    padding: 20px;
-    border-radius: 16px;
-    border: 2px solid rgba(102, 126, 234, 0.2);
-}
-
-.message-content .message-text {
-    color: #2d3748;
-    line-height: 1.6;
-    margin-bottom: 10px;
-    white-space: pre-wrap;
-}
-
-.message-time {
-    font-size: 0.85rem;
-    color: #6c757d;
-    text-align: right;
-}
-
-.reply-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-}
-
-.replier-name {
-    font-weight: 700;
-    color: #2d3748;
-}
-
-.replier-role {
-    font-size: 0.8rem;
-    padding: 2px 6px;
-    border-radius: 8px;
-    background: #667eea;
-    color: white;
-    font-weight: 600;
-}
-
-.reply-section {
-    margin-top: auto;
-    padding-top: 25px;
-    border-top: 2px solid #e2e8f0;
-}
-
-.reply-section h4 {
-    margin-bottom: 15px;
-    color: #2d3748;
-    font-size: 1.2rem;
-    font-weight: 700;
-}
-
-.reply-form .form-group {
-    margin-bottom: 15px;
-}
-
-.reply-form textarea {
-    resize: vertical;
-    min-height: 120px;
-}
-
-.form-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-}
-
-.no-message-selected {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: #adb5bd;
-}
-
-.select-message-prompt {
-    text-align: center;
-}
-
-.prompt-icon {
-    font-size: 4rem;
-    margin-bottom: 15px;
-    opacity: 0.5;
-}
-
-.select-message-prompt h3 {
-    font-size: 1.4rem;
-    margin-bottom: 10px;
-    color: #6c757d;
-}
-
-/* Loading and unauthorized styles (same as previous components) */
-.loading-container, .unauthorized-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.spinner {
-    width: 60px;
-    height: 60px;
-    border: 5px solid rgba(255, 255, 255, 0.2);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 1s ease-in-out infinite;
-}
-
-.unauthorized-card {
-    background: white;
-    padding: 60px 50px;
-    border-radius: 24px;
-    text-align: center;
-    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.25);
-    max-width: 450px;
-}
-
-.back-btn, .btn {
-    padding: 12px 24px;
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: all 0.3s ease;
-}
-
-.back-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-}
-
-.btn-outline {
-    background: white;
-    color: #667eea;
-    border: 2px solid #667eea;
-}
-
-.btn-danger {
-    background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(252, 129, 129, 0.3);
-}
-
-.btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-}
-
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-/* Animations */
-@@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-/* Responsive Design */
-@@media (max-width: 1024px) {
-    .messages-layout {
-        grid-template-columns: 350px 1fr;
+    // Models
+    private class NewMessageModel
+    {
+        public string RecipientType { get; set; } = "Student";
+        public int RecipientId { get; set; }
+        public string Subject { get; set; } = "";
+        public string Content { get; set; } = "";
     }
 }
-
-@@media (max-width: 768px) {
+<style>
+    /* Admin Messages Page Styles */
     .admin-messages {
+        min-height: auto;
         padding: 20px;
     }
 
     .header-bar {
-        flex-direction: column;
-        gap: 20px;
-        padding: 20px;
-    }
-
-    .message-stats {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 20px 30px;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         flex-wrap: wrap;
-        justify-content: center;
-    }
-
-    .messages-layout {
-        grid-template-columns: 1fr;
-        height: auto;
-    }
-
-    .messages-list {
-        border-right: none;
-        border-bottom: 2px solid #e2e8f0;
-        max-height: 400px;
-    }
-
-    .conversation-item {
-        max-width: 95%;
-    }
-
-    .detail-header {
-        flex-direction: column;
         gap: 15px;
     }
 
-    .message-actions {
-        align-self: stretch;
-        justify-content: center;
+        .header-bar h2 {
+            color: #2d3748;
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+    .back-btn {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
     }
-}
+
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+    .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #48bb78, #38a169);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3);
+    }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(72, 187, 120, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+    .message-stats {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .stat-item {
+        padding: 8px 16px;
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 25px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+        font-weight: 500;
+        font-size: 0.9rem;
+    }
+
+        .stat-item:hover {
+            background: rgba(255, 255, 255, 0.9);
+            transform: translateY(-1px);
+        }
+
+        .stat-item.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-color: #667eea;
+        }
+
+    /* Messages Container */
+    .messages-container {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        overflow: hidden;
+        height: calc(100vh - 200px);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 40px;
+        font-size: 1.2rem;
+        color: #666;
+    }
+
+    /* Messages Layout */
+    .messages-layout {
+        display: grid;
+        grid-template-columns: 400px 1fr;
+        height: 100%;
+        min-height: 0;
+        flex: 1;
+    }
+
+    /* Messages List */
+    .messages-list {
+        border-right: 1px solid #e2e8f0;
+        background: rgba(248, 250, 252, 0.8);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+    }
+
+    .list-header {
+        padding: 20px;
+        border-bottom: 1px solid #e2e8f0;
+        background: white;
+        flex-shrink: 0;
+    }
+
+        .list-header h3 {
+            margin: 0 0 15px 0;
+            color: #2d3748;
+            font-size: 1.3rem;
+        }
+
+    .search-input {
+        width: 100%;
+        padding: 12px 15px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        background: rgba(255, 255, 255, 0.8);
+    }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+    .messages-scroll {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+    }
+
+    /* Message Items */
+    .message-item {
+        display: flex;
+        padding: 15px;
+        border-radius: 12px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: white;
+        border: 2px solid transparent;
+        position: relative;
+    }
+
+        .message-item:hover {
+            transform: translateX(5px);
+            border-color: #667eea;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .message-item.selected {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+        }
+
+        .message-item.unread {
+            background: linear-gradient(135deg, #fed7d715, #feb2b215);
+            border-left: 4px solid #e53e3e;
+        }
+
+    .message-avatar {
+        margin-right: 15px;
+        display: flex;
+        align-items: flex-start;
+    }
+
+    .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+
+        .avatar.student {
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+        }
+
+        .avatar.teacher {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+        }
+
+        .avatar.admin {
+            background: linear-gradient(135deg, #ed8936, #dd6b20);
+        }
+
+    .message-preview {
+        flex: 1;
+    }
+
+    .message-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 5px;
+    }
+
+    .sender-name {
+        font-weight: 600;
+        color: #2d3748;
+        font-size: 0.95rem;
+    }
+
+    .message-time {
+        font-size: 0.8rem;
+        color: #718096;
+    }
+
+    .message-subject {
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 5px;
+        font-size: 0.9rem;
+    }
+
+    .message-excerpt {
+        color: #718096;
+        font-size: 0.85rem;
+        line-height: 1.4;
+        margin-bottom: 8px;
+    }
+
+    .message-meta {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .sender-role {
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: #e2e8f0;
+        color: #4a5568;
+    }
+
+    .unread-badge {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: #e53e3e;
+        color: white;
+        font-weight: 600;
+    }
+
+    .replies-count {
+        font-size: 0.75rem;
+        color: #718096;
+    }
+
+    .delete-message-btn {
+        background: none;
+        border: none;
+        color: #e53e3e;
+        cursor: pointer;
+        padding: 5px;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+        opacity: 0.7;
+    }
+
+        .delete-message-btn:hover {
+            opacity: 1;
+            background: rgba(229, 62, 62, 0.1);
+        }
+
+    /* Empty State */
+    .empty-messages {
+        text-align: center;
+        padding: 40px 20px;
+        color: #718096;
+    }
+
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        opacity: 0.5;
+    }
+
+    /* Message Detail - Fixed Layout */
+    .message-detail {
+        display: flex;
+        flex-direction: column;
+        background: white;
+        height: 100%;
+        min-height: 0;
+        flex: 1;
+    }
+
+    .detail-header {
+        padding: 20px 30px;
+        border-bottom: 1px solid #e2e8f0;
+        background: rgba(248, 250, 252, 0.8);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-shrink: 0;
+    }
+
+    .message-info h3 {
+        margin: 0 0 15px 0;
+        color: #2d3748;
+        font-size: 1.4rem;
+    }
+
+    .message-sender {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .sender-details .sender-name {
+        font-size: 1rem;
+        color: #2d3748;
+    }
+
+    .sender-email {
+        font-size: 0.85rem;
+        color: #718096;
+    }
+
+    .message-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .btn-outline {
+        background: transparent;
+        border: 2px solid #667eea;
+        color: #667eea;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+        .btn-outline:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+    /* Message Conversation - Scrollable Area */
+    .message-conversation {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        position: relative;
+    }
+
+    /* FIXED: Conversation Scroll Area with proper scrolling */
+    .conversation-scroll-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 30px;
+        background: rgba(248, 250, 252, 0.5);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-height: 0;
+    }
+
+    .conversation-item {
+        max-width: 70%;
+        flex-shrink: 0;
+    }
+
+        .conversation-item.sent {
+            margin-left: auto;
+        }
+
+        .conversation-item.received {
+            margin-right: auto;
+        }
+
+    .message-content {
+        padding: 15px 20px;
+        border-radius: 18px;
+        position: relative;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        flex-shrink: 0;
+    }
+
+    .conversation-item.sent .message-content {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border-bottom-right-radius: 5px;
+    }
+
+    .conversation-item.received .message-content {
+        background: white;
+        color: #2d3748;
+        border-bottom-left-radius: 5px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .reply-header {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .replier-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .replier-role {
+        font-size: 0.75rem;
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .conversation-item.received .replier-role {
+        background: #e2e8f0;
+        color: #4a5568;
+    }
+
+    .message-text {
+        line-height: 1.5;
+        margin-bottom: 8px;
+    }
+
+    .delete-single-btn {
+        background: none;
+        border: none;
+        color: #e53e3e;
+        cursor: pointer;
+        padding: 5px;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+        opacity: 0.7;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+
+        .delete-single-btn:hover {
+            opacity: 1;
+            background: rgba(229, 62, 62, 0.1);
+        }
+
+    .conversation-item.sent .delete-single-btn {
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+        .conversation-item.sent .delete-single-btn:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+    /* White date for sender's messages */
+    .conversation-item.sent .message-time {
+        font-size: 0.75rem;
+        opacity: 0.8;
+        color: white !important;
+    }
+
+    .conversation-item.received .message-time {
+        font-size: 0.75rem;
+        opacity: 0.8;
+        color: #718096;
+    }
+
+    /* Reply Section - Always Visible and Separate */
+    .reply-section {
+        background: white;
+        border-top: 2px solid #e2e8f0;
+        padding: 15px 30px;
+        z-index: 10;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+        flex-shrink: 0;
+    }
+
+    .reply-form {
+        display: flex;
+        align-items: flex-end;
+        gap: 12px;
+        width: 100%;
+    }
+
+    .form-group {
+        flex: 1;
+        margin-bottom: 0;
+        position: relative;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 8px 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        resize: none;
+        font-family: inherit;
+        height: 40px;
+        min-height: 40px;
+        max-height: 40px;
+        overflow-y: auto;
+        line-height: 1.4;
+    }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+    .form-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    /* Compact buttons */
+    .btn-outline, .btn-primary {
+        padding: 6px 16px;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        border: none;
+        white-space: nowrap;
+        height: 32px;
+    }
+
+    .btn-outline {
+        background: transparent;
+        border: 2px solid #667eea;
+        color: #667eea;
+    }
+
+        .btn-outline:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-1px);
+        }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #48bb78, #38a169);
+        color: white;
+        box-shadow: 0 2px 6px rgba(72, 187, 120, 0.3);
+    }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(72, 187, 120, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+    /* No Message Selected */
+    .no-message-selected {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(248, 250, 252, 0.5);
+    }
+
+    .select-message-prompt {
+        text-align: center;
+        color: #718096;
+    }
+
+    .prompt-icon {
+        font-size: 4rem;
+        margin-bottom: 15px;
+        opacity: 0.5;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(5px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 20px;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        width: 100%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-header {
+        padding: 25px 30px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+
+    .close-btn {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 5px;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.3s ease;
+    }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+    .modal-body {
+        flex: 1;
+        padding: 30px;
+        overflow-y: auto;
+    }
+
+    .new-message-form {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+        .new-message-form label {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+    .modal-footer {
+        padding: 20px 30px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        background: rgba(248, 250, 252, 0.8);
+    }
+
+    /* Responsive Design */
+    @@media (max-width: 1024px) {
+        .messages-layout {
+            grid-template-columns: 1fr;
+            height: auto;
+        }
+
+        .messages-list {
+            border-right: none;
+            border-bottom: 1px solid #e2e8f0;
+            max-height: 400px;
+        }
+
+        .conversation-item {
+            max-width: 85%;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .admin-messages {
+            padding: 10px;
+        }
+
+        .header-bar {
+            padding: 15px 20px;
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .header-actions {
+            justify-content: center;
+        }
+
+        .message-stats {
+            justify-content: center;
+        }
+
+        .conversation-item {
+            max-width: 95%;
+        }
+
+        .detail-header {
+            flex-direction: column;
+            gap: 15px;
+            align-items: stretch;
+        }
+
+        .message-actions {
+            justify-content: center;
+        }
+
+        .reply-section {
+            padding: 12px 20px;
+        }
+
+        .reply-form {
+            gap: 8px;
+        }
+    }
+
+    /* Scrollbar Styling */
+    .messages-scroll::-webkit-scrollbar,
+    .conversation-scroll-area::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .messages-scroll::-webkit-scrollbar-track,
+    .conversation-scroll-area::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+
+    .messages-scroll::-webkit-scrollbar-thumb,
+    .conversation-scroll-area::-webkit-scrollbar-thumb {
+        background: #cbd5e0;
+        border-radius: 4px;
+    }
+
+        .messages-scroll::-webkit-scrollbar-thumb:hover,
+        .conversation-scroll-area::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+
+    /* Ensure scrollbars work in Firefox */
+    .messages-scroll,
+    .conversation-scroll-area {
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e0 #f1f1f1;
+    }
+
+    /* Animation for new messages */
+    @@keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .message-item {
+        animation: slideIn 0.3s ease;
+    }
+    /* New Message Modal Styles */
+    .search-input {
+        width: 100%;
+        padding: 12px 15px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        background: rgba(255, 255, 255, 0.8);
+    }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+    .role-filter-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .role-filter-btn {
+        padding: 8px 16px;
+        border: 2px solid #e2e8f0;
+        background: white;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        flex: 1;
+        min-width: 80px;
+    }
+
+        .role-filter-btn:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .role-filter-btn.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-color: #667eea;
+        }
+
+    .users-list {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        background: white;
+    }
+
+    .user-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 15px;
+        border-bottom: 1px solid #f1f1f1;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+        .user-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-item:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .user-item.selected {
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            border-left: 4px solid #667eea;
+        }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        margin-right: 12px;
+        flex-shrink: 0;
+    }
+
+        .user-avatar.student {
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+        }
+
+        .user-avatar.teacher {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+        }
+
+    .user-info {
+        flex: 1;
+    }
+
+    .user-name {
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 4px;
+    }
+
+    .user-details {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .user-email {
+        font-size: 0.85rem;
+        color: #718096;
+    }
+
+    .user-role {
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: #e2e8f0;
+        color: #4a5568;
+    }
+
+    .no-users-found {
+        text-align: center;
+        padding: 30px 20px;
+        color: #718096;
+    }
+
+        .no-users-found .empty-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+
+        .no-users-found h4 {
+            margin: 0 0 8px 0;
+            color: #4a5568;
+        }
+
+        .no-users-found p {
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+    .message-textarea {
+        resize: vertical;
+        min-height: 120px;
+        font-family: inherit;
+        line-height: 1.5;
+    }
+
+    /* Scrollbar for users list */
+    .users-list::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .users-list::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+    }
+
+    .users-list::-webkit-scrollbar-thumb {
+        background: #cbd5e0;
+        border-radius: 3px;
+    }
+
+        .users-list::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
 </style>
