@@ -9,9 +9,8 @@ public class Facility
     public string BuildingName { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
-
-    // Store photos as JSON with metadata
     public string PhotosJson { get; set; } = "[]";
+
 
     [NotMapped]
     public List<FacilityPhoto> Photos

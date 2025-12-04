@@ -1,0 +1,1426 @@
+﻿@page "/studentuniinfo"
+@using Microsoft.EntityFrameworkCore
+@using System.Text.Json
+@using Thesis.Models
+@inject Data.AppDbContext Context
+@inject AuthStateService AuthStateService
+@inject NavigationManager Navigation
+
+<PageTitle>Thesis - University Information</PageTitle>
+
+@if (!isAuthChecked)
+{
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading University Information...</p>
+    </div>
+}
+else if (!isStudent)
+{
+    <div class="unauthorized-container">
+        <div class="unauthorized-card">
+            <div class="unauthorized-icon">🚫</div>
+            <h3>Access Denied</h3>
+            <p>Only students can access this page.</p>
+            <button class="btn btn-primary" @onclick="RedirectToHome">Return to Home</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="student-uni-container">
+        <!-- Header Section -->
+        <div class="student-uni-header">
+            <button class="back-btn" @onclick="GoBack">← Back</button>
+            <h1>🏫 University Information</h1>
+            <div class="welcome-message">
+                Welcome, @currentUser?.Name! Explore university facilities and professors.
+            </div>
+        </div>
+
+        <!-- Main Content with Tabs -->
+        <div class="student-content-wrapper">
+            <div class="student-tabs">
+                <button class="student-tab @(activeTab == "overview" ? "active" : "")"
+                        @onclick='() => SwitchTab("overview")'>
+                    🏛️ University Overview
+                </button>
+                <button class="student-tab @(activeTab == "facilities" ? "active" : "")"
+                        @onclick='() => SwitchTab("facilities")'>
+                    🏢 Facilities
+                </button>
+                <button class="student-tab @(activeTab == "professors" ? "active" : "")"
+                        @onclick='() => SwitchTab("professors")'>
+                    👨‍🏫 Professors
+                </button>
+            </div>
+
+            <div class="student-tab-content">
+                <!-- Overview Tab -->
+                @if (activeTab == "overview")
+                {
+                    <div class="overview-section">
+                        <!-- Contact Information Card -->
+                        @if (contactInfo != null)
+                        {
+                            <div class="contact-info-card">
+                                <div class="card-header">
+                                    <h3>📞 University Contact Information</h3>
+                                </div>
+                                <div class="contact-details">
+                                    <div class="contact-item">
+                                        <div class="contact-icon">🏢</div>
+                                        <div class="contact-text">
+                                            <strong>Main Address:</strong>
+                                            <p>@contactInfo.MainAddress</p>
+                                        </div>
+                                    </div>
+                                    <div class="contact-item">
+                                        <div class="contact-icon">📞</div>
+                                        <div class="contact-text">
+                                            <strong>Phone:</strong>
+                                            <p>@contactInfo.PhoneNumber</p>
+                                        </div>
+                                    </div>
+                                    <div class="contact-item">
+                                        <div class="contact-icon">📧</div>
+                                        <div class="contact-text">
+                                            <strong>Email:</strong>
+                                            <p>@contactInfo.Email</p>
+                                        </div>
+                                    </div>
+                                    <div class="contact-item">
+                                        <div class="contact-icon">👤</div>
+                                        <div class="contact-text">
+                                            <strong>Secretary:</strong>
+                                            <p>@contactInfo.SecretaryName</p>
+                                        </div>
+                                    </div>
+
+                                    @if (!string.IsNullOrEmpty(contactInfo.Facebook) ||
+                                                            !string.IsNullOrEmpty(contactInfo.Twitter) ||
+                                                            !string.IsNullOrEmpty(contactInfo.Instagram) ||
+                                                            !string.IsNullOrEmpty(contactInfo.LinkedIn))
+                                    {
+                                        <div class="social-media-section">
+                                            <h4>Follow Us</h4>
+                                            <div class="social-links">
+                                                @if (!string.IsNullOrEmpty(contactInfo.Facebook))
+                                                {
+                                                    <a href="@contactInfo.Facebook" target="_blank" class="social-link facebook">
+                                                        📘 Facebook
+                                                    </a>
+                                                }
+                                                @if (!string.IsNullOrEmpty(contactInfo.Twitter))
+                                                {
+                                                    <a href="@contactInfo.Twitter" target="_blank" class="social-link twitter">
+                                                        🐦 Twitter
+                                                    </a>
+                                                }
+                                                @if (!string.IsNullOrEmpty(contactInfo.Instagram))
+                                                {
+                                                    <a href="@contactInfo.Instagram" target="_blank" class="social-link instagram">
+                                                        📷 Instagram
+                                                    </a>
+                                                }
+                                                @if (!string.IsNullOrEmpty(contactInfo.LinkedIn))
+                                                {
+                                                    <a href="@contactInfo.LinkedIn" target="_blank" class="social-link linkedin">
+                                                        💼 LinkedIn
+                                                    </a>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="no-data-card">
+                                <div class="empty-icon">📞</div>
+                                <h3>No Contact Information Available</h3>
+                                <p>University contact information has not been added yet.</p>
+                            </div>
+                        }
+
+                        <!-- Quick Stats -->
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-icon">🏢</div>
+                                <div class="stat-number">@facilities.Count</div>
+                                <div class="stat-label">Facilities</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">👨‍🏫</div>
+                                <div class="stat-number">@professorProfiles.Count</div>
+                                <div class="stat-label">Professors</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">⭐</div>
+                                <div class="stat-number">@averageProfessorRating.ToString("0.0")</div>
+                                <div class="stat-label">Avg. Professor Rating</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <!-- Facilities Tab -->
+                @if (activeTab == "facilities")
+                {
+                    <div class="facilities-section">
+                        <div class="facilities-header">
+                            <h2>🏢 University Facilities</h2>
+                            <div class="facility-filters">
+                                <select class="filter-select" @bind="facilityTypeFilter">
+                                    <option value="">All Types</option>
+                                    <option value="Library">Library</option>
+                                    <option value="Laboratory">Laboratory</option>
+                                    <option value="Classroom">Classroom</option>
+                                    <option value="Auditorium">Auditorium</option>
+                                    <option value="Sports">Sports Facility</option>
+                                    <option value="Cafeteria">Cafeteria</option>
+                                    <option value="Administrative">Administrative</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                <input type="text" class="search-input" placeholder="Search facilities..." @bind="facilitySearchTerm" />
+                            </div>
+                        </div>
+
+                        @if (isLoading)
+                        {
+                            <div class="loading">Loading facilities...</div>
+                        }
+                        else
+                        {
+                            <div class="facilities-grid">
+                                @foreach (var facility in filteredFacilities)
+                                {
+                                    <div class="facility-card">
+                                        <div class="facility-image-container">
+                                            @{
+                                                var displayPhoto = GetDisplayPhoto(facility);
+                                            }
+                                            @if (displayPhoto != null)
+                                            {
+                                                <img src="@displayPhoto.Url" alt="@facility.Name"
+                                                     class="facility-image" />
+                                                @if (displayPhoto.IsFeatured)
+                                                {
+                                                    <div class="featured-badge">⭐ Featured</div>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <div class="no-image-placeholder">
+                                                    <div class="placeholder-icon">🏛️</div>
+                                                </div>
+                                            }
+                                            <div class="facility-type-badge">
+                                                @facility.Type
+                                            </div>
+                                        </div>
+                                        <div class="facility-card-body">
+                                            <h3 class="facility-name">@facility.Name</h3>
+                                            <div class="facility-location">
+                                                <span class="location-icon">🏢</span>
+                                                <span>@facility.BuildingName</span>
+                                            </div>
+                                            <div class="facility-address">
+                                                <span class="address-icon">📍</span>
+                                                <span>@facility.Address</span>
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(facility.Description))
+                                            {
+                                                <div class="facility-description">
+                                                    <p>@facility.Description</p>
+                                                </div>
+                                            }
+                                            @if (facility.Photos.Count > 0)
+                                            {
+                                                <div class="facility-photos-count">
+                                                    <span class="photos-icon">📸</span>
+                                                    <span>@facility.Photos.Count photo(s)</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (!filteredFacilities.Any())
+                                {
+                                    <div class="empty-facilities">
+                                        <div class="empty-icon">🏛️</div>
+                                        <h3>No Facilities Found</h3>
+                                        <p>@(facilities.Any() ? "Try adjusting your search filters." : "No facilities have been added yet.")</p>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Professors Tab -->
+                @if (activeTab == "professors")
+                {
+                    <div class="professors-section">
+                        <div class="professors-header">
+                            <h2>👨‍🏫 University Professors</h2>
+                            <div class="professor-filters">
+                                <select class="filter-select" @bind="departmentFilter">
+                                    <option value="">All Departments</option>
+                                    @foreach (var dept in uniqueDepartments.OrderBy(d => d))
+                                    {
+                                        <option value="@dept">@dept</option>
+                                    }
+                                </select>
+                                <select class="filter-select" @bind="ratingFilter">
+                                    <option value="0">All Ratings</option>
+                                    <option value="4">4+ Stars</option>
+                                    <option value="3">3+ Stars</option>
+                                </select>
+                                <input type="text" class="search-input" placeholder="Search professors..." @bind="professorSearchTerm" />
+                            </div>
+                        </div>
+
+                        @if (isLoading)
+                        {
+                            <div class="loading">Loading professors...</div>
+                        }
+                        else
+                        {
+                            <div class="professors-grid">
+                                @foreach (var profile in filteredProfiles)
+                                {
+                                    var ratingInfo = professorRatings.FirstOrDefault(r => r.ProfessorId == profile.UserId);
+                                    var studentRating = studentRatings.FirstOrDefault(r => r.ProfessorId == profile.UserId);
+                                    var hasRated = studentRating != null;
+                                    var currentUserRating = hasRated ? studentRating.Rating : 0;
+
+                                    <div class="professor-card">
+                                        <div class="professor-header">
+                                            <div class="professor-avatar">
+                                                @if (!string.IsNullOrEmpty(profile.ProfilePicture))
+                                                {
+                                                    <img src="@profile.ProfilePicture" alt="@profile.User?.Name @profile.User?.LastName" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="avatar-placeholder">
+                                                        @GetInitials(profile.User?.Name, profile.User?.LastName)
+                                                    </div>
+                                                }
+                                            </div>
+                                            <div class="professor-name-title">
+                                                <h3>@profile.User?.Name @profile.User?.LastName</h3>
+                                                @if (!string.IsNullOrEmpty(profile.Department))
+                                                {
+                                                    <div class="professor-department">
+                                                        📚 @profile.Department
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+
+                                        <div class="professor-rating-section">
+                                            <div class="rating-display">
+                                                <div class="average-rating">
+                                                    <span class="rating-stars">
+                                                        @for (int i = 1; i <= 5; i++)
+                                                        {
+                                                            if (i <= Math.Floor(ratingInfo?.AverageRating ?? 0))
+                                                            {
+                                                                <span class="star filled">★</span>
+                                                            }
+                                                            else if (i == Math.Ceiling(ratingInfo?.AverageRating ?? 0) && (ratingInfo?.AverageRating ?? 0) % 1 >= 0.5)
+                                                            {
+                                                                <span class="star half">★</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="star">★</span>
+                                                            }
+                                                        }
+                                                    </span>
+                                                    <span class="rating-number">
+                                                        @((ratingInfo?.AverageRating ?? 0).ToString("0.0"))
+                                                    </span>
+                                                    <span class="rating-count">
+                                                        (@(ratingInfo?.TotalRatings ?? 0) @(ratingInfo?.TotalRatings == 1 ? "rating" : "ratings"))
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="professor-contact-info">
+                                            @if (!string.IsNullOrEmpty(profile.User?.Email))
+                                            {
+                                                <div class="contact-item">
+                                                    <span class="contact-icon">📧</span>
+                                                    <span>@profile.User.Email</span>
+                                                </div>
+                                            }
+                                            @if (!string.IsNullOrEmpty(profile.OfficeLocation))
+                                            {
+                                                <div class="contact-item">
+                                                    <span class="contact-icon">📍</span>
+                                                    <span>Office: @profile.OfficeLocation</span>
+                                                </div>
+                                            }
+                                            @if (!string.IsNullOrEmpty(profile.OfficeHours))
+                                            {
+                                                <div class="contact-item">
+                                                    <span class="contact-icon">🕐</span>
+                                                    <span>Hours: @profile.OfficeHours</span>
+                                                </div>
+                                            }
+                                            @if (!string.IsNullOrEmpty(profile.PhoneNumber))
+                                            {
+                                                <div class="contact-item">
+                                                    <span class="contact-icon">📞</span>
+                                                    <span>@profile.PhoneNumber</span>
+                                                </div>
+                                            }
+                                        </div>
+
+                                        @if (!string.IsNullOrEmpty(profile.Bio))
+                                        {
+                                            <div class="professor-bio">
+                                                <h4>About</h4>
+                                                <p>@profile.Bio</p>
+                                            </div>
+                                        }
+
+                                        <div class="professor-websites">
+                                            @if (!string.IsNullOrEmpty(profile.Website))
+                                            {
+                                                <a href="@profile.Website" target="_blank" class="website-link">
+                                                    🌐 Website
+                                                </a>
+                                            }
+                                            @if (!string.IsNullOrEmpty(profile.LinkedIn))
+                                            {
+                                                <a href="@profile.LinkedIn" target="_blank" class="website-link">
+                                                    💼 LinkedIn
+                                                </a>
+                                            }
+                                        </div>
+
+                                        <!-- Rating Section for Students -->
+                                        <div class="rating-section">
+                                            <div class="your-rating">
+                                                <strong>Your Rating:</strong>
+                                                <div class="rating-input">
+                                                    @for (int i = 1; i <= 5; i++)
+                                                    {
+                                                        var starValue = i;
+                                                        <button class="star-btn @(starValue <= currentUserRating ? "active" : "")"
+                                                                @onclick="@(() => RateProfessor(profile.UserId, starValue))">
+                                                            ★
+                                                        </button>
+                                                    }
+                                                </div>
+                                                @if (hasRated)
+                                                {
+                                                    <div class="rating-info">
+                                                        You rated @currentUserRating star(s)
+                                                        <button class="btn-remove-rating" @onclick="@(() => RemoveRating(profile.UserId))">
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (!filteredProfiles.Any())
+                                {
+                                    <div class="empty-professors">
+                                        <div class="empty-icon">👨‍🏫</div>
+                                        <h3>No Professors Found</h3>
+                                        <p>@(professorProfiles.Any() ? "Try adjusting your search filters." : "No professor profiles have been added yet.")</p>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isAuthChecked = false;
+    private bool isStudent = false;
+    private bool isLoading = true;
+
+    private string activeTab = "overview";
+    private User? currentUser = null;
+
+    // Facilities
+    private List<Facility> facilities = new();
+    private string facilityTypeFilter = "";
+    private string facilitySearchTerm = "";
+
+    // Professors
+    private List<ProfessorProfileEntity> professorProfiles = new();
+    private List<string> uniqueDepartments = new();
+    private List<ProfessorRatingInfo> professorRatings = new();
+    private List<ProfessorRating> studentRatings = new();
+    private string departmentFilter = "";
+    private string professorSearchTerm = "";
+    private int ratingFilter = 0;
+
+    // Contact Information
+    private ContactInfo? contactInfo = null;
+
+    // Computed Properties
+    private double averageProfessorRating =>
+        professorRatings.Any() ? professorRatings.Average(r => r.AverageRating) : 0;
+
+    private List<Facility> filteredFacilities => facilities
+        .Where(f => string.IsNullOrEmpty(facilityTypeFilter) || f.Type == facilityTypeFilter)
+        .Where(f => string.IsNullOrEmpty(facilitySearchTerm) ||
+                    f.Name.Contains(facilitySearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    f.BuildingName.Contains(facilitySearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (f.Description ?? "").Contains(facilitySearchTerm, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    private List<ProfessorProfileEntity> filteredProfiles => professorProfiles
+        .Where(p => string.IsNullOrEmpty(departmentFilter) || (p.Department ?? "") == departmentFilter)
+        .Where(p => string.IsNullOrEmpty(professorSearchTerm) ||
+                    (p.User?.Name ?? "").Contains(professorSearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (p.User?.LastName ?? "").Contains(professorSearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (p.Department ?? "").Contains(professorSearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (p.Bio ?? "").Contains(professorSearchTerm, StringComparison.OrdinalIgnoreCase))
+        .Where(p => ratingFilter == 0 ||
+                    (professorRatings.FirstOrDefault(r => r.ProfessorId == p.UserId)?.AverageRating ?? 0) >= ratingFilter)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthorization();
+        if (isStudent)
+        {
+            await LoadData();
+        }
+    }
+
+    private async Task CheckAuthorization()
+    {
+        try
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                if (AuthStateService.CurrentUser != null)
+                    break;
+                await Task.Delay(100);
+            }
+
+            currentUser = AuthStateService.CurrentUser;
+            isStudent = currentUser != null && currentUser.Role == "Student";
+            isAuthChecked = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Authorization error: {ex.Message}");
+            isAuthChecked = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            // Load facilities
+            facilities = await Context.Facilities.ToListAsync();
+            Console.WriteLine($"Loaded {facilities.Count} facilities");
+
+            // Load professor profiles with user data
+            professorProfiles = await Context.ProfessorProfiles
+                .Include(p => p.User)
+                .Where(p => p.User != null)
+                .ToListAsync();
+
+            Console.WriteLine($"Loaded {professorProfiles.Count} professor profiles");
+
+            // Get unique departments
+            uniqueDepartments = professorProfiles
+                .Where(p => !string.IsNullOrEmpty(p.Department))
+                .Select(p => p.Department)
+                .Distinct()
+                .ToList();
+
+            Console.WriteLine($"Found {uniqueDepartments.Count} unique departments");
+
+            // Load professor ratings
+            var allRatings = await Context.ProfessorRatings.ToListAsync();
+            Console.WriteLine($"Loaded {allRatings.Count} total ratings");
+
+            // Calculate average ratings for each professor
+            professorRatings = professorProfiles.Select(profile =>
+            {
+                var ratings = allRatings.Where(r => r.ProfessorId == profile.UserId).ToList();
+                return new ProfessorRatingInfo
+                {
+                    ProfessorId = profile.UserId,
+                    AverageRating = ratings.Any() ? ratings.Average(r => r.Rating) : 0,
+                    TotalRatings = ratings.Count
+                };
+            }).ToList();
+
+            Console.WriteLine($"Calculated ratings for {professorRatings.Count} professors");
+
+            // Load current student's ratings if available
+            if (currentUser != null)
+            {
+                studentRatings = await Context.ProfessorRatings
+                    .Where(r => r.StudentId == currentUser.Id)
+                    .ToListAsync();
+                Console.WriteLine($"Loaded {studentRatings.Count} ratings from current student");
+            }
+
+            // Load contact information
+            contactInfo = await Context.ContactInfo.FirstOrDefaultAsync();
+            Console.WriteLine($"Contact info loaded: {contactInfo != null}");
+
+            isLoading = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading data: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SwitchTab(string tab)
+    {
+        if (tab == "overview" || tab == "facilities" || tab == "professors")
+        {
+            activeTab = tab;
+            StateHasChanged();
+        }
+    }
+
+    private FacilityPhoto? GetDisplayPhoto(Facility facility)
+    {
+        var photos = facility.Photos;
+        return photos.FirstOrDefault(p => p.IsFeatured) ?? photos.FirstOrDefault();
+    }
+
+    private string GetInitials(string? firstName, string? lastName)
+    {
+        var first = !string.IsNullOrEmpty(firstName) ? firstName[0].ToString() : "";
+        var last = !string.IsNullOrEmpty(lastName) ? lastName[0].ToString() : "";
+        return $"{first}{last}".ToUpper();
+    }
+
+    private async Task RateProfessor(int professorId, int rating)
+    {
+        Console.WriteLine($"RateProfessor called: professorId={professorId}, rating={rating}");
+
+        if (currentUser == null)
+        {
+            Console.WriteLine("Current user is null");
+            return;
+        }
+
+        if (rating < 1 || rating > 5)
+        {
+            Console.WriteLine($"Invalid rating: {rating}. Must be between 1 and 5.");
+            return;
+        }
+
+        try
+        {
+            Console.WriteLine($"Starting to rate professor {professorId} with rating {rating} by student {currentUser.Id}");
+
+            // Check if rating already exists
+            var existingRating = await Context.ProfessorRatings
+                .FirstOrDefaultAsync(r => r.ProfessorId == professorId && r.StudentId == currentUser.Id);
+
+            if (existingRating != null)
+            {
+                Console.WriteLine($"Updating existing rating from {existingRating.Rating} to {rating}");
+                existingRating.Rating = rating;
+                existingRating.CreatedAt = DateTime.Now;
+                Context.ProfessorRatings.Update(existingRating);
+
+                // Update local list
+                var localRating = studentRatings.FirstOrDefault(r => r.Id == existingRating.Id);
+                if (localRating != null)
+                {
+                    localRating.Rating = rating;
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Creating new rating for professor {professorId}");
+                var newRating = new ProfessorRating
+                {
+                    ProfessorId = professorId,
+                    StudentId = currentUser.Id,
+                    Rating = rating,
+                    CreatedAt = DateTime.Now
+                };
+                await Context.ProfessorRatings.AddAsync(newRating);
+
+                // Add to local list
+                studentRatings.Add(newRating);
+            }
+
+            var saveResult = await Context.SaveChangesAsync();
+            Console.WriteLine($"Save changes result: {saveResult} rows affected");
+
+            // Update the professor ratings summary
+            await UpdateProfessorRatingSummary(professorId);
+
+            // Force UI refresh
+            StateHasChanged();
+
+            Console.WriteLine($"Successfully rated professor {professorId} with rating {rating}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error rating professor: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+        }
+    }
+
+    private async Task UpdateProfessorRatingSummary(int professorId)
+    {
+        try
+        {
+            var allRatings = await Context.ProfessorRatings
+                .Where(r => r.ProfessorId == professorId)
+                .ToListAsync();
+
+            var professorRating = professorRatings.FirstOrDefault(r => r.ProfessorId == professorId);
+            if (professorRating != null)
+            {
+                professorRating.AverageRating = allRatings.Any() ? allRatings.Average(r => r.Rating) : 0;
+                professorRating.TotalRatings = allRatings.Count;
+            }
+            else
+            {
+                professorRatings.Add(new ProfessorRatingInfo
+                {
+                    ProfessorId = professorId,
+                    AverageRating = allRatings.Any() ? allRatings.Average(r => r.Rating) : 0,
+                    TotalRatings = allRatings.Count
+                });
+            }
+
+            Console.WriteLine($"Updated rating summary for professor {professorId}: Avg={professorRating?.AverageRating ?? 0}, Count={professorRating?.TotalRatings ?? 0}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating rating summary: {ex.Message}");
+        }
+    }
+
+    private async Task RemoveRating(int professorId)
+    {
+        Console.WriteLine($"RemoveRating called: professorId={professorId}");
+
+        if (currentUser == null) return;
+
+        try
+        {
+            var ratingToRemove = await Context.ProfessorRatings
+                .FirstOrDefaultAsync(r => r.ProfessorId == professorId && r.StudentId == currentUser.Id);
+
+            if (ratingToRemove != null)
+            {
+                Console.WriteLine($"Removing rating for professor {professorId}");
+
+                Context.ProfessorRatings.Remove(ratingToRemove);
+                await Context.SaveChangesAsync();
+
+                // Remove from local list
+                var localRating = studentRatings.FirstOrDefault(r => r.Id == ratingToRemove.Id);
+                if (localRating != null)
+                {
+                    studentRatings.Remove(localRating);
+                }
+
+                // Update the professor ratings summary
+                await UpdateProfessorRatingSummary(professorId);
+
+                StateHasChanged();
+                Console.WriteLine($"Successfully removed rating for professor {professorId}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error removing rating: {ex.Message}");
+        }
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/studenthome");
+    private void RedirectToHome() => Navigation.NavigateTo("/");
+
+    // Helper classes
+    public class ProfessorRatingInfo
+    {
+        public int ProfessorId { get; set; }
+        public double AverageRating { get; set; }
+        public int TotalRatings { get; set; }
+    }
+}
+<style>
+    .student-uni-container {
+        min-height: 100vh;
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        color: #2d3748;
+    }
+
+    .loading-container, .unauthorized-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .spinner {
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top: 4px solid #fff;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin-bottom: 1rem;
+    }
+
+    @@keyframes spin {
+        0%
+
+    {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+
+    }
+
+    .unauthorized-card {
+        background: white;
+        padding: 3rem;
+        border-radius: 1rem;
+        text-align: center;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        max-width: 400px;
+        width: 90%;
+    }
+
+    .unauthorized-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+    }
+
+    .unauthorized-card h3 {
+        color: #e53e3e;
+        margin-bottom: 0.5rem;
+    }
+
+    .unauthorized-card p {
+        color: #718096;
+        margin-bottom: 1.5rem;
+    }
+
+    .btn-primary {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background 0.2s;
+    }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+    .student-uni-header {
+        margin-bottom: 2rem;
+        color: white;
+    }
+
+    .back-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        margin-bottom: 1rem;
+        backdrop-filter: blur(5px);
+        transition: all 0.2s;
+    }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateX(-3px);
+        }
+
+    .student-uni-header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+        font-weight: 800;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .welcome-message {
+        font-size: 1.1rem;
+        opacity: 0.9;
+    }
+
+    .student-content-wrapper {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 1.5rem;
+        padding: 2rem;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        min-height: 600px;
+    }
+
+    .student-tabs {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #edf2f7;
+        padding-bottom: 1rem;
+        overflow-x: auto;
+    }
+
+    .student-tab {
+        background: transparent;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.75rem;
+        font-weight: 600;
+        color: #718096;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+    }
+
+        .student-tab:hover {
+            background: #f7fafc;
+            color: #4a5568;
+        }
+
+        .student-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 1rem;
+        border: 1px solid #e2e8f0;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: transform 0.2s;
+    }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+    .stat-icon {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .stat-label {
+        color: #718096;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .contact-info-card, .no-data-card {
+        background: white;
+        border-radius: 1rem;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    }
+
+    .card-header {
+        background: #f8fafc;
+        padding: 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+        .card-header h3 {
+            margin: 0;
+            color: #2d3748;
+        }
+
+    .contact-details {
+        padding: 2rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 2rem;
+    }
+
+    .contact-item {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .contact-icon {
+        background: rgba(102, 126, 234, 0.1);
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-size: 1.2rem;
+    }
+
+    .contact-text strong {
+        display: block;
+        color: #4a5568;
+        margin-bottom: 0.25rem;
+    }
+
+    .contact-text p, .contact-text span {
+        margin: 0;
+        color: #2d3748;
+        font-weight: 500;
+    }
+
+    .social-media-section {
+        padding: 2rem;
+        border-top: 1px solid #e2e8f0;
+        background: #faf5ff;
+    }
+
+        .social-media-section h4 {
+            margin-bottom: 1rem;
+            color: #553c9a;
+        }
+
+    .social-links {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .social-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 600;
+        background: white;
+        border: 1px solid #e2e8f0;
+        transition: all 0.2s;
+        color: #4a5568;
+    }
+
+        .social-link:hover {
+            transform: translateY(-2px);
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+    .no-data-card {
+        text-align: center;
+        padding: 3rem;
+        color: #a0aec0;
+    }
+
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .facilities-header, .professors-header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .facility-filters, .professor-filters {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .filter-select, .search-input {
+        padding: 0.6rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        outline: none;
+        font-size: 0.95rem;
+    }
+
+        .filter-select:focus, .search-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+    .facilities-grid, .professors-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .facility-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+        .facility-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+    .facility-image-container {
+        height: 200px;
+        position: relative;
+        background: #edf2f7;
+        overflow: hidden;
+    }
+
+    .facility-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .no-image-placeholder, .avatar-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e0 100%);
+        color: #718096;
+        font-size: 3rem;
+    }
+
+    .featured-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(255, 215, 0, 0.9);
+        color: #744210;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        backdrop-filter: blur(4px);
+    }
+
+    .facility-type-badge {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(0,0,0,0.6);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.8rem;
+        backdrop-filter: blur(4px);
+    }
+
+    .facility-card-body {
+        padding: 1.5rem;
+    }
+
+    .facility-name {
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+        color: #2d3748;
+    }
+
+    .facility-location, .facility-address {
+        font-size: 0.9rem;
+        color: #718096;
+        margin-bottom: 0.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .facility-description {
+        margin-top: 1rem;
+        font-size: 0.95rem;
+        color: #4a5568;
+        line-height: 1.5;
+    }
+
+    .facility-photos-count {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #e2e8f0;
+        font-size: 0.85rem;
+        color: #718096;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .professor-card {
+        background: white;
+        border-radius: 1rem;
+        border: 1px solid #e2e8f0;
+        padding: 1.5rem;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+        .professor-card:hover {
+            box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+            border-color: #b794f4;
+        }
+
+    .professor-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .professor-avatar {
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 3px solid #e9d8fd;
+        flex-shrink: 0;
+    }
+
+        .professor-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+    .avatar-placeholder {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #553c9a;
+        background: #e9d8fd;
+    }
+
+    .professor-name-title h3 {
+        margin: 0;
+        font-size: 1.1rem;
+        color: #2d3748;
+    }
+
+    .professor-department {
+        font-size: 0.85rem;
+        color: #805ad5;
+        background: #faf5ff;
+        padding: 0.1rem 0.5rem;
+        border-radius: 0.5rem;
+        display: inline-block;
+        margin-top: 0.25rem;
+    }
+
+    .rating-display {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #fffff0;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid #fefcbf;
+    }
+
+    .rating-stars {
+        color: #ecc94b;
+        font-size: 1.1rem;
+    }
+
+    .rating-number {
+        font-weight: 700;
+        color: #2d3748;
+    }
+
+    .rating-count {
+        color: #718096;
+        font-size: 0.85rem;
+    }
+
+    .professor-bio h4 {
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        color: #a0aec0;
+        margin-bottom: 0.25rem;
+    }
+
+    .professor-bio p {
+        font-size: 0.9rem;
+        color: #4a5568;
+        line-height: 1.5;
+        margin: 0;
+    }
+
+    .professor-websites {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .website-link {
+        font-size: 0.85rem;
+        text-decoration: none;
+        color: #553c9a;
+        background: #f3ebff;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        transition: background 0.2s;
+    }
+
+        .website-link:hover {
+            background: #e9d8fd;
+        }
+
+    /* Rating Input Section */
+    .rating-section {
+        margin-top: auto;
+        padding-top: 1rem;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .your-rating strong {
+        display: block;
+        font-size: 0.85rem;
+        color: #718096;
+        margin-bottom: 0.5rem;
+    }
+
+    .rating-input {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .star-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #e2e8f0;
+        cursor: pointer;
+        padding: 0;
+        transition: color 0.2s;
+    }
+
+        .star-btn:hover, .star-btn.active {
+            color: #ecc94b;
+        }
+
+    .rating-info {
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #4a5568;
+    }
+
+    .btn-remove-rating {
+        background: none;
+        border: none;
+        color: #e53e3e;
+        font-size: 0.8rem;
+        cursor: pointer;
+        text-decoration: underline;
+    }
+
+        .btn-remove-rating:hover {
+            color: #c53030;
+        }
+
+    .empty-facilities, .empty-professors {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 4rem;
+        background: #f7fafc;
+        border-radius: 1rem;
+        color: #718096;
+    }
+
+    @@media (max-width: 768px) {
+        .student-uni-container
+
+    {
+        padding: 1rem;
+    }
+
+    .student-uni-header h1 {
+        font-size: 1.8rem;
+    }
+
+    .student-content-wrapper {
+        padding: 1rem;
+    }
+
+    .facilities-header, .professors-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .facility-filters, .professor-filters {
+        width: 100%;
+    }
+
+    .filter-select, .search-input {
+        flex: 1;
+    }
+
+    }
+</style>
