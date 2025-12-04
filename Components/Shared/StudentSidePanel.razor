@@ -1,5 +1,9 @@
 ﻿@inject AuthStateService AuthStateService
 @inject NavigationManager Navigation
+@inject IConfiguration Configuration
+@using Microsoft.Data.Sqlite
+@using Thesis.Models
+@implements IDisposable
 
 <div class="admin-sidebar">
     <div class="sidebar-header">
@@ -54,7 +58,22 @@
 
     <div class="sidebar-footer">
         <div class="user-info">
-            <div class="user-avatar">@GetUserInitials()</div>
+            <div class="user-avatar-container">
+                @if (!string.IsNullOrEmpty(profilePictureUrl))
+                {
+                    <img src="@profilePictureUrl" alt="Profile Picture" class="user-avatar-img"
+                         onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                    <div class="user-avatar-fallback" style="display: none;">
+                        <span>@GetUserInitials()</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="user-avatar-fallback">
+                        <span>@GetUserInitials()</span>
+                    </div>
+                }
+            </div>
             <div class="user-details">
                 <div class="user-name">@AuthStateService.CurrentUser?.Name</div>
                 <div class="user-role">Student</div>
@@ -66,28 +85,128 @@
         </button>
     </div>
 </div>
+
 @if (showLogoutModal)
 {
-    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
-        <div style="background: white; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); width: 90%; max-width: 400px; overflow: hidden;">
-            <div style="padding: 1.5rem; border-bottom: 1px solid #e2e8f0;">
-                <h3 style="margin: 0; font-size: 1.25rem; color: #1e293b;">Confirm Logout</h3>
+    <div class="logout-modal-overlay">
+        <div class="logout-modal">
+            <div class="logout-modal-header">
+                <h3>Confirm Logout</h3>
             </div>
-            <div style="padding: 1.5rem;">
-                <p style="margin: 0; color: #64748b;">Are you sure you want to log out?</p>
+            <div class="logout-modal-body">
+                <p>Are you sure you want to log out?</p>
             </div>
-            <div style="padding: 1.5rem; border-top: 1px solid #e2e8f0; display: flex; gap: 0.75rem; justify-content: flex-end;">
-                <button type="button" style="padding: 0.75rem 1.5rem; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; background: white; color: #374151;" @onclick="CloseLogoutModal">Cancel</button>
-                <button type="button" style="padding: 0.75rem 1.5rem; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; background: #ef4444; color: white;" @onclick="ConfirmLogout">Logout</button>
+            <div class="logout-modal-footer">
+                <button type="button" class="logout-modal-cancel" @onclick="CloseLogoutModal">Cancel</button>
+                <button type="button" class="logout-modal-confirm" @onclick="ConfirmLogout">Logout</button>
             </div>
         </div>
     </div>
 }
+
 @code {
     [Inject]
     private NavigationManager NavigationManager { get; set; } = default!;
 
     private bool showLogoutModal = false;
+    private string profilePictureUrl = string.Empty;
+    private System.Timers.Timer? refreshTimer;
+    private int currentUserId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfilePicture();
+        currentUserId = AuthStateService.CurrentUser?.Id ?? 0;
+
+        // Set up a timer to refresh the profile picture every 30 seconds
+        // This ensures the sidebar updates when the profile picture is changed in settings
+        refreshTimer = new System.Timers.Timer(30000); // 30 seconds
+        refreshTimer.Elapsed += async (sender, e) => await RefreshProfilePicture();
+        refreshTimer.AutoReset = true;
+        refreshTimer.Enabled = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadProfilePicture();
+        }
+    }
+
+    private async Task LoadProfilePicture()
+    {
+        try
+        {
+            var studentId = AuthStateService.CurrentUser?.Id ?? 0;
+            if (studentId > 0)
+            {
+                var settings = await GetStudentSettingsFromDatabase(studentId);
+                if (settings != null && !string.IsNullOrEmpty(settings.ProfilePicture))
+                {
+                    profilePictureUrl = settings.ProfilePicture;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading profile picture: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshProfilePicture()
+    {
+        try
+        {
+            var studentId = AuthStateService.CurrentUser?.Id ?? 0;
+            if (studentId > 0 && studentId == currentUserId)
+            {
+                var settings = await GetStudentSettingsFromDatabase(studentId);
+                if (settings != null)
+                {
+                    var newProfilePicture = settings.ProfilePicture ?? "";
+                    if (profilePictureUrl != newProfilePicture)
+                    {
+                        profilePictureUrl = newProfilePicture;
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refreshing profile picture: {ex.Message}");
+        }
+    }
+
+    private async Task<StudentSettings?> GetStudentSettingsFromDatabase(int studentId)
+    {
+        var connectionString = Configuration.GetConnectionString("DefaultConnection");
+
+        using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync();
+
+        var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT ProfilePicture
+            FROM StudentSettings
+            WHERE StudentId = @studentId";
+
+        command.Parameters.AddWithValue("@studentId", studentId);
+
+        using var reader = await command.ExecuteReaderAsync();
+
+        if (await reader.ReadAsync())
+        {
+            return new StudentSettings
+            {
+                ProfilePicture = !reader.IsDBNull(0) ? reader.GetString(0) : null
+            };
+        }
+
+        return null;
+    }
 
     private string GetUserInitials()
     {
@@ -121,7 +240,13 @@
         await AuthStateService.LogoutAsync();
         NavigationManager.NavigateTo("/", true);
     }
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+    }
 }
+
 <style>
     .admin-sidebar {
         width: 280px;
@@ -130,6 +255,9 @@
         display: flex;
         flex-direction: column;
         box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        height: 100vh;
+        position: sticky;
+        top: 0;
     }
 
     .sidebar-header {
@@ -146,6 +274,7 @@
     .sidebar-nav {
         flex: 1;
         padding: 1rem 0;
+        overflow-y: auto;
     }
 
     .nav-item {
@@ -156,6 +285,7 @@
         text-decoration: none;
         border-left: 3px solid transparent;
         transition: all 0.2s ease;
+        cursor: pointer;
     }
 
         .nav-item:hover, .nav-item.active {
@@ -191,25 +321,45 @@
         margin-bottom: 1rem;
     }
 
-    .user-avatar {
+    .user-avatar-container {
+        position: relative;
         width: 40px;
         height: 40px;
+    }
+
+    .user-avatar-img {
+        width: 100%;
+        height: 100%;
         border-radius: 50%;
-        background: #60a5fa;
+        object-fit: cover;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .user-avatar-fallback {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 600;
         font-size: 0.875rem;
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.3);
     }
 
     .user-details {
         flex: 1;
+        min-width: 0; /* Prevent text overflow */
     }
 
     .user-name {
         font-weight: 600;
         font-size: 0.875rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .user-role {
@@ -230,6 +380,7 @@
         justify-content: center;
         gap: 0.5rem;
         transition: all 0.2s ease;
+        font-family: inherit;
     }
 
         .logout-btn:hover {
@@ -237,4 +388,156 @@
             border-color: rgba(239, 68, 68, 0.3);
         }
 
+    .logout-icon {
+        font-size: 1rem;
+    }
+
+    /* Logout Modal Styles */
+    .logout-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    }
+
+    .logout-modal {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        width: 90%;
+        max-width: 400px;
+        overflow: hidden;
+        animation: modalSlideIn 0.3s ease-out;
+    }
+
+    @@keyframes modalSlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .logout-modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+        .logout-modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: #1e293b;
+        }
+
+    .logout-modal-body {
+        padding: 1.5rem;
+    }
+
+        .logout-modal-body p {
+            margin: 0;
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+    .logout-modal-footer {
+        padding: 1.5rem;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-end;
+    }
+
+    .logout-modal-cancel {
+        padding: 0.75rem 1.5rem;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: white;
+        color: #374151;
+        font-family: inherit;
+    }
+
+        .logout-modal-cancel:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+
+    .logout-modal-confirm {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 6px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: #ef4444;
+        color: white;
+        font-family: inherit;
+    }
+
+        .logout-modal-confirm:hover {
+            background: #dc2626;
+        }
+
+    /* Responsive Design */
+    @@media (max-width: 768px) {
+        .admin-sidebar {
+            width: 250px;
+        }
+
+        .sidebar-header {
+            padding: 1.25rem;
+        }
+
+        .nav-item {
+            padding: 0.75rem 1.25rem;
+        }
+
+        .user-info {
+            flex-direction: column;
+            text-align: center;
+            gap: 0.5rem;
+        }
+
+        .user-details {
+            width: 100%;
+        }
+
+        .user-name {
+            font-size: 0.8rem;
+        }
+
+        .user-role {
+            font-size: 0.7rem;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .admin-sidebar {
+            width: 220px;
+        }
+
+        .app-logo h3 {
+            font-size: 1.1rem;
+        }
+
+        .nav-icon {
+            font-size: 1rem;
+        }
+
+        .nav-text {
+            font-size: 0.9rem;
+        }
+    }
 </style>
