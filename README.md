@@ -14,33 +14,33 @@
 
 ---
 
-## 📖 Overview
+## Overview
 
 **Gnosis** is a comprehensive, web-based platform designed to bridge the gap between students, professors, and university administration. Built with the power of **Blazor** and **.NET 8**, it facilitates seamless academic management, real-time communication, and efficient resource sharing in a modern, responsive environment.
 
-## 🚀 Features
+## Features
 
 The system is compartmentalized into three distinct portals to ensure security and ease of use:
 
-### 🎓 Student Portal
+### Student Portal
 * **Academic Dashboard**: Real-time view of enrolled courses, pending exercises, and grade history.
 * **Communication Hub**: Participate in course forums and exchange private messages with instructors.
 * **Campus Utilities**: Access the daily cafeteria menu and view official university announcements.
 * **Profile Control**: Manage personal contact details and account settings.
 
-### 👨‍🏫 Professor Portal
+### Professor Portal
 * **Course Command**: Create curriculums, manage enrollments, and upload assignments.
 * **Grading System**: A streamlined interface for inputting and modifying student grades.
 * **Direct Engagement**: Post course-wide announcements and answer student queries directly.
 * **Professional Profile**: Maintain academic credentials and public contact info.
 
-### 🛠 Admin Portal
+### Admin Portal
 * **User Management**: Full control over student and professor accounts (CRUD operations).
 * **Curriculum Administration**: Oversee the creation, updating, and deletion of courses.
 * **System Oversight**: Generate reports, configure global settings, and update university metadata.
 * **Moderation**: Monitor forums and messages to ensure community guidelines.
 
-## 💻 Technology Stack
+## Technology Stack
 
 | Component | Technology | Description |
 | :--- | :--- | :--- |
@@ -51,7 +51,7 @@ The system is compartmentalized into three distinct portals to ensure security a
 | **Auth** | Custom | Custom `AuthenticationStateProvider` implementation |
 | **Styling** | Bootstrap | Responsive UI framework + Custom CSS |
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 ├── Components/
@@ -66,7 +66,7 @@ The system is compartmentalized into three distinct portals to ensure security a
 └── thesis.db           # SQLite Database
 ```
 
-## 🛠 Getting Started
+## Getting Started
 Follow these steps to get a local copy up and running.
 
 ## Prerequisites
@@ -91,11 +91,11 @@ dotnet watch
 ```
 The application will typically launch at https://localhost:7197 or http://localhost:5283. Check Properties/launchSettings.json for specific ports.
 
-## 🔐 Accounts
+## Accounts
 To access the different portals, you will need users with specific roles (Student, Professor, Admin) in the database.
 Note: Refer to the Users table in thesis.db for credentials or use the Registration page (if enabled) to create a new user.
 
-## 📜 License
+## License
 This project is created for academic purposes.
 
 <div align="center"> Developed by <strong>Andreas Kandilas</strong> </div>
